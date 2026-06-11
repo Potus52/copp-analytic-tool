@@ -1842,8 +1842,89 @@ function findCol(token){
     ||App.profile.find(c=>c.header.toLowerCase().includes(token))
     ||App.profile.find(c=>token.includes(c.role));
 }
+/* Entity mention detection: matches loaded entity IDs and display names in a question */
+function findEntityMention(q){
+  const ql=q.toLowerCase();
+  const qc=ql.replace(/[^a-z0-9]/g,'');
+  // pass 1: explicit entity ID or full display name in the question
+  for(const f of App.files){
+    if(f.entity&&new RegExp('\\b'+f.entity+'\\b').test(ql))return{id:String(f.entity),name:f.entityName||f.name};
+    if(f.entityName){
+      const n=f.entityName.toLowerCase(), c=n.replace(/[^a-z0-9]/g,'');
+      if(c.length>=4&&(ql.includes(n)||qc.includes(c)))return{id:String(f.entity||''),name:f.entityName};
+    }
+  }
+  // pass 2: an abbreviation in the question that appears inside exactly one entity name (e.g. "C4MT")
+  const STOP=new Set(['montana','money','full','analysis','analyze','about','committee','fund','funds','action','dossier','entity','that','this','what','show','give','like','would','overview','summary','breakdown','total','totals','spend','spending']);
+  const toks=ql.split(/[^a-z0-9]+/).filter(t=>t.length>=4&&!STOP.has(t)&&!/^\d+$/.test(t));
+  const hits=[];
+  const tokenHits=(t,c)=>{
+    if(c.includes(t))return true;
+    // abbreviation with digits, e.g. "C4MT" for "Conservatives4MT": first letter + the digit-anchored tail
+    if(/\d/.test(t)&&t.length>=3){
+      const tail=t.slice(1);
+      if(c[0]===t[0]&&c.includes(tail))return true;
+    }
+    return false;
+  };
+  for(const f of App.files){
+    if(!f.entityName)continue;
+    const c=f.entityName.toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(c.length>=4&&toks.some(t=>tokenHits(t,c))&&!hits.includes(f))hits.push(f);
+  }
+  if(hits.length===1)return{id:String(hits[0].entity||''),name:hits[0].entityName};
+  return null;
+}
+/* Overview answer for broad analytical questions ("full analysis of X", "tell me about Y") */
+function overviewQuery(q,d){
+  const H=d.sheet.headers, rows0=d.sheet.rows;
+  const gi=n=>H.indexOf(n);
+  const iE=gi('Entity'),iF=gi('Flow'),iY=gi('Year'),iC=gi('Counterparty'),iA=gi('Amount');
+  if(iF<0||iA<0)return null; // overview needs consolidated dossier data
+  const who=findEntityMention(q);
+  let rows=rows0, scopeNote='all loaded data';
+  if(who){
+    const cn=(who.name||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    rows=rows0.filter(r=>{
+      if(who.id&&String(r[iE])===who.id)return true;
+      const cp=String(r[iC]).toLowerCase().replace(/[^a-z0-9]/g,'');
+      return cn.length>=4&&cp.length>=4&&(cp.includes(cn)||cn.includes(cp));
+    });
+    scopeNote=`Entity ${who.id||''} (${who.name}) — its own filings plus every row in other dossiers naming it as counterparty`;
+  }
+  const n=v=>{const x=toNum(v);return x==null?0:x;};
+  // flow totals, split by own activity vs mentions
+  const flows={};
+  rows.forEach(r=>{const own=who?String(r[iE])===who.id:true;
+    const k=r[iF]+(who?(own?' (own filings)':' (named in other dossiers)'):'');
+    (flows[k]=flows[k]||{sum:0,count:0});flows[k].sum+=n(r[iA]);flows[k].count++;});
+  const flowRows=Object.entries(flows).map(([k,v])=>[k,v.count,fmt.usd(v.sum)]).sort((a,b)=>toNum(b[2].replace(/[$,]/g,''))-toNum(a[2].replace(/[$,]/g,'')));
+  // by year
+  const yrs={};rows.forEach(r=>{const y=r[iY]||'(n/a)';(yrs[y]=yrs[y]||0);yrs[y]+=n(r[iA]);});
+  // top counterparties
+  const cps={};rows.forEach(r=>{const c=String(r[iC]).trim()||'(blank)';(cps[c]=cps[c]||0);cps[c]+=n(r[iA]);});
+  const topCp=Object.entries(cps).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const grand=rows.reduce((a,r)=>a+n(r[iA]),0);
+  const own=who?rows.filter(r=>String(r[iE])===who.id):rows;
+  const recv=own.filter(r=>r[iF]==='Contribution Received').reduce((a,r)=>a+n(r[iA]),0);
+  const out=own.filter(r=>r[iF]==='Expenditure'||r[iF]==='Contribution Given').reduce((a,r)=>a+n(r[iA]),0);
+  const yearRows=Object.entries(yrs).sort((a,b)=>a[0].localeCompare(b[0])).map(([y,v])=>['Total '+y,'',fmt.usd(v)]);
+  return {id:'q'+Date.now(),title:'Q: '+q,
+    narrative:`Overview of ${scopeNote}: ${rows.length.toLocaleString()} transaction(s) totaling ${fmt.usd(grand)}.${who?` ${who.name} took in ${fmt.usd(recv)} and paid out ${fmt.usd(out)} in its own filings.`:''} The table breaks the money down by flow${who?' and source':''}, then by year, with the top counterparties beneath. For deeper views, run the report library against this scope (party splits, concentration, quarterly, cross-entity), or ask a narrower question such as "total expenditures by counterparty where year = 2026".`,
+    kpis:[{l:'Transactions',v:rows.length.toLocaleString()},{l:'Total amount',v:fmt.usd(grand)},...(who?[{l:'Received (own)',v:fmt.usd(recv)},{l:'Paid out (own)',v:fmt.usd(out)}]:[])],
+    columns:['Breakdown','Transactions','Total'],
+    rows:[...flowRows,...yearRows,['— Top counterparties —','',''],...topCp.map(([c,v])=>[c,'',fmt.usd(v)])],
+    chart:{type:'bar',label:'Top counterparties',labels:topCp.map(([c])=>c),data:topCp.map(([,v])=>v)}};
+}
 function localQuery(q,d){
   const ql=q.toLowerCase();
+  // broad analytical asks get a structured overview, not a row dump
+  if(/analy|overview|summar|tell me about|breakdown|full /.test(ql)&&!/\bby\b|where|top\s+\d/.test(ql)){
+    const ov=overviewQuery(q,d); if(ov)return ov;
+  }
+  if(findEntityMention(q)&&!/\bby\b|where|top\s+\d|count|how many|average|avg/.test(ql)){
+    const ov=overviewQuery(q,d); if(ov)return ov;
+  }
   let rows=d.sheet.rows;
   // where filters
   const wm=ql.match(/where\s+(.+)$/);
@@ -2063,9 +2144,33 @@ $('btnDlAllXlsx').onclick=()=>{
 };
 $('btnDlAllPdf').onclick=()=>{if(App.results.length)pdfReport(App.results,`COPP-full-report-${new Date().toISOString().slice(0,10)}.pdf`);};
 
+/* Prepare a result table for PDF: drop empty columns, prioritize informative
+   ones, cap at maxCols, truncate long text so rows stay one or two lines. */
+function pdfTable(res,maxCols){
+  maxCols=maxCols||9;
+  let cols=res.columns.map((c,i)=>({name:String(c),idx:i}));
+  const rows=res.rows.slice(0,40);
+  // drop columns that are entirely blank in the shown rows
+  cols=cols.filter(c=>rows.some(r=>String(r[c.idx]??'').trim()!==''));
+  // if still too wide, keep the most informative columns in a sensible order
+  if(cols.length>maxCols){
+    const PRIORITY=['#','Entity','Year','Flow','Date','Counterparty','Recipient','Target','Party','Office','Amount','Total','Total $','Support $','Oppose $','% of Total','Cumulative %','Quarter','Report ID','Election','Recipient Type','Purpose','Description'];
+    const rank=n=>{const i=PRIORITY.findIndex(p=>p.toLowerCase()===n.toLowerCase());return i<0?PRIORITY.length+(/(amount|total|\$)/i.test(n)?0:5):i;};
+    cols=cols.slice().sort((a,b)=>rank(a.name)-rank(b.name)).slice(0,maxCols)
+      .sort((a,b)=>a.idx-b.idx);
+  }
+  const trunc=v=>{const s=String(v??'');return s.length>60?s.slice(0,57)+'…':s;};
+  return{head:cols.map(c=>c.name),
+    body:rows.map(r=>cols.map(c=>trunc(r[c.idx]))),
+    dropped:res.columns.length-cols.length};
+}
 function pdfReport(results,name){
-  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'letter'});
+  const {jsPDF}=window.jspdf;
+  // landscape when any report needs a wide table
+  const wide=results.some(res=>res.rows&&res.rows.length&&pdfTable(res).head.length>6);
+  const doc=new jsPDF({unit:'pt',format:'letter',orientation:wide?'landscape':'portrait'});
   const W=doc.internal.pageSize.getWidth();
+  const H=doc.internal.pageSize.getHeight();
   // cover band
   doc.setFillColor(10,34,64);doc.rect(0,0,W,86,'F');doc.setFillColor(201,162,39);doc.rect(0,86,W,4,'F');
   doc.setTextColor(255);doc.setFont('times','bold');doc.setFontSize(18);doc.text('Montana COPP Analytic Tool',40,38);
@@ -2074,7 +2179,7 @@ function pdfReport(results,name){
   doc.text('Source: '+App.files.map(f=>f.name).join('; ').slice(0,110),40,70);
   let y=116;
   results.forEach((res,ri)=>{
-    if(y>660){doc.addPage();y=50;}
+    if(y>H-130){doc.addPage();y=50;}
     doc.setTextColor(28,68,117);doc.setFont('times','bold');doc.setFontSize(14);
     doc.text(`${ri+1}. ${res.title}`,40,y);y+=8;
     doc.setDrawColor(201,162,39);doc.setLineWidth(1.5);doc.line(40,y,200,y);y+=14;
@@ -2084,15 +2189,19 @@ function pdfReport(results,name){
     const ch=App.charts[res.id];
     if(ch){try{const img=ch.toBase64Image('image/png',1);
       const h=180,w=Math.min(W-80,420);
-      if(y+h>720){doc.addPage();y=50;}
+      if(y+h>H-70){doc.addPage();y=50;}
       doc.setFillColor(255,255,255);doc.rect(40,y,w,h,'F');
       doc.addImage(img,'PNG',40,y,w,h);y+=h+12;}catch(e){}}
     if(res.rows?.length){
-      doc.autoTable({startY:y,head:[res.columns],body:res.rows.slice(0,40).map(r=>r.map(String)),
-        margin:{left:40,right:40},styles:{fontSize:7.5,cellPadding:3},
+      const t=pdfTable(res);
+      doc.autoTable({startY:y,head:[t.head],body:t.body,
+        margin:{left:40,right:40},styles:{fontSize:8,cellPadding:3,overflow:'linebreak',valign:'top'},
         headStyles:{fillColor:[19,51,90],textColor:255},alternateRowStyles:{fillColor:[238,241,244]}});
       y=doc.lastAutoTable.finalY+10;
-      if(res.rows.length>40){doc.setFontSize(8);doc.setTextColor(120);doc.text(`(${res.rows.length-40} additional rows in the XLSX/CSV export)`,40,y);y+=16;}
+      const notes=[];
+      if(res.rows.length>40)notes.push(`${res.rows.length-40} additional rows`);
+      if(t.dropped>0)notes.push(`${t.dropped} less informative column${t.dropped===1?'':'s'} omitted`);
+      if(notes.length){doc.setFontSize(8);doc.setTextColor(120);doc.text(`(${notes.join('; ')} — see the XLSX/CSV export for the complete table)`,40,y);y+=16;}
     }
     y+=8;
   });
@@ -2107,7 +2216,7 @@ function pdfReport(results,name){
   // page numbers
   const pages=doc.getNumberOfPages();
   for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(130);
-    doc.text(`Montana COPP Analytic Tool · page ${i} of ${pages}`,W-200,770);}
+    doc.text(`Montana COPP Analytic Tool · page ${i} of ${pages}`,W-200,H-22);}
   doc.save(name);
 }
 
