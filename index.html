@@ -1,0 +1,1925 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Montana COPP Analytic Tool</title>
+<meta name="description" content="Montana Commissioner of Political Practices — campaign finance and lobbying dossier validation and analysis tool.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  /* Montana state web identity: mt.gov navy, seal gold ("Oro y Plata"), record-paper neutrals */
+  --navy:#0A2240; --navy-2:#13335A; --navy-3:#1C4475;
+  --gold:#C9A227; --gold-soft:#E8D89A;
+  --bg:#F6F7F9; --surface:#FFFFFF; --surface-2:#EEF1F4;
+  --ink:#1B2733; --ink-soft:#4E5D6C; --line:#D6DCE3; --line-strong:#AEB8C2;
+  --ok:#2E7D4F; --ok-bg:#E7F3EC;
+  --warn:#9A6A00; --warn-bg:#FBF3DD;
+  --err:#B3261E; --err-bg:#FBEAE8;
+  --info:#1C4475; --info-bg:#E8EEF6;
+  --shadow:0 1px 3px rgba(10,34,64,.10),0 4px 14px rgba(10,34,64,.06);
+  --r:6px;
+}
+[data-theme="dark"]{
+  --navy:#0A2240; --navy-2:#0E2A4C; --navy-3:#1C4475;
+  --gold:#D9B53F; --gold-soft:#6B5A1E;
+  --bg:#0D1520; --surface:#15212F; --surface-2:#1B2A3B;
+  --ink:#E7ECF1; --ink-soft:#9FB0C0; --line:#2A3B4E; --line-strong:#3C5168;
+  --ok:#5CC489; --ok-bg:#15291E;
+  --warn:#E3B341; --warn-bg:#2C2410;
+  --err:#F2867E; --err-bg:#321614;
+  --info:#7FA8DB; --info-bg:#152538;
+  --shadow:0 1px 3px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{font-family:'Public Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.55}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);padding:8px 10px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+h1,h2,h3{font-family:'Source Serif 4',Georgia,serif}
+.mono{font-family:'IBM Plex Mono',monospace}
+
+/* ===== Masthead (mt.gov-style navy bar with gold rule) ===== */
+.masthead{background:var(--navy);color:#fff;border-bottom:4px solid var(--gold)}
+.masthead-inner{max-width:1240px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.seal{width:46px;height:46px;border-radius:50%;border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;flex:none;background:radial-gradient(circle at 35% 30%, #1C4475, #0A2240)}
+.seal svg{width:28px;height:28px}
+.mast-title h1{font-size:21px;font-weight:700;line-height:1.2;letter-spacing:.2px}
+.mast-title .sub{font-size:12px;color:#C7D3E0;letter-spacing:.6px;text-transform:uppercase}
+.mast-title .motto{font-size:11px;color:var(--gold-soft);font-style:italic}
+.mast-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn-ghost{background:transparent;color:#E3EAF2;border:1px solid #3C5168;border-radius:var(--r);padding:7px 12px;font-size:13px;font-weight:600;display:inline-flex;gap:6px;align-items:center}
+.btn-ghost:hover{background:var(--navy-3);border-color:var(--gold)}
+
+/* ===== Phase stepper ===== */
+.stepper{background:var(--navy-2);border-bottom:1px solid var(--navy-3)}
+.stepper-inner{max-width:1240px;margin:0 auto;padding:0 24px;display:flex;gap:0}
+.step{display:flex;align-items:center;gap:10px;padding:11px 22px 11px 0;color:#8FA3B8;font-size:13.5px;font-weight:600;border:none;background:none}
+.step + .step{padding-left:22px;border-left:1px solid var(--navy-3)}
+.step .num{width:24px;height:24px;border-radius:50%;border:1.5px solid #5B7390;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+.step.active{color:#fff}
+.step.active .num{background:var(--gold);border-color:var(--gold);color:var(--navy)}
+.step.done{color:#C7D3E0}
+.step.done .num{border-color:var(--ok);color:var(--ok)}
+.step[disabled]{cursor:not-allowed;opacity:.55}
+.step:not([disabled]):hover{color:#fff}
+
+/* ===== Layout ===== */
+.wrap{max-width:1240px;margin:0 auto;padding:26px 24px 80px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);margin-bottom:22px}
+.panel-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.panel-head h2{font-size:18px;font-weight:700}
+.panel-head .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.panel-body{padding:18px}
+.eyebrow{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);font-weight:700;font-family:'Public Sans',sans-serif}
+
+/* ===== Buttons ===== */
+.btn{border-radius:var(--r);padding:9px 16px;font-size:14px;font-weight:600;border:1px solid transparent;display:inline-flex;align-items:center;gap:7px}
+.btn-primary{background:var(--navy-2);color:#fff}
+.btn-primary:hover{background:var(--navy-3)}
+.btn-gold{background:var(--gold);color:var(--navy);border-color:var(--gold)}
+.btn-gold:hover{filter:brightness(1.06)}
+.btn-outline{background:var(--surface);color:var(--navy-3);border-color:var(--line-strong)}
+[data-theme="dark"] .btn-outline{color:var(--ink)}
+.btn-outline:hover{border-color:var(--gold)}
+.btn-danger{background:var(--err);color:#fff}
+.btn-sm{padding:5px 10px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ===== Dropzone ===== */
+.dropzone{border:2px dashed var(--line-strong);border-radius:8px;background:var(--surface-2);padding:46px 24px;text-align:center;transition:border-color .15s,background .15s;cursor:pointer}
+.dropzone.drag{border-color:var(--gold);background:var(--info-bg)}
+.dropzone .big{font-family:'Source Serif 4',serif;font-size:19px;font-weight:600;margin:10px 0 4px}
+.dropzone .hint{color:var(--ink-soft);font-size:13px}
+.dz-icon{width:46px;height:46px;color:var(--navy-3);margin:0 auto}
+[data-theme="dark"] .dz-icon{color:var(--gold)}
+
+/* ===== File chips ===== */
+.filelist{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.filechip{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:9px 12px;font-size:13.5px}
+.filechip .meta{color:var(--ink-soft);font-size:12px}
+.filechip .x{margin-left:auto;background:none;border:none;color:var(--err);font-weight:700;font-size:15px;padding:2px 6px}
+
+/* ===== Tables ===== */
+.tbl-scroll{overflow:auto;max-height:430px;border:1px solid var(--line);border-radius:var(--r)}
+table.data{border-collapse:collapse;width:100%;font-size:13px}
+table.data th{position:sticky;top:0;background:var(--navy-2);color:#fff;text-align:left;padding:8px 10px;font-weight:600;white-space:nowrap;z-index:1}
+table.data td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.data tr:nth-child(even) td{background:var(--surface-2)}
+td.cell-err{background:var(--err-bg)!important;outline:1px solid var(--err);cursor:pointer}
+td.cell-fixed{background:var(--ok-bg)!important}
+td.editable:hover{outline:1px dashed var(--gold);cursor:text}
+
+/* ===== Badges / pills ===== */
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:600}
+.pill-err{background:var(--err-bg);color:var(--err)}
+.pill-warn{background:var(--warn-bg);color:var(--warn)}
+.pill-ok{background:var(--ok-bg);color:var(--ok)}
+.pill-info{background:var(--info-bg);color:var(--info)}
+
+/* ===== Issue list ===== */
+.issue{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:var(--r);padding:11px 14px;margin-bottom:9px;background:var(--surface)}
+.issue.sev-error{border-left-color:var(--err)}
+.issue.sev-warning{border-left-color:var(--warn)}
+.issue.resolved{opacity:.62;border-left-color:var(--ok)}
+.issue .where{font-size:12px;color:var(--ink-soft)}
+.issue .acts{margin-left:auto;display:flex;gap:6px;flex:none;flex-wrap:wrap}
+.issue .val{background:var(--surface-2);border-radius:4px;padding:0 5px}
+
+/* ===== Tooltip "i" hovers ===== */
+.tip{position:relative;display:inline-flex}
+.tip .i{width:16px;height:16px;border-radius:50%;border:1.3px solid var(--info);color:var(--info);font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;font-style:normal;cursor:help;background:var(--surface)}
+.tip .tipbox{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:260px;background:var(--navy);color:#E7ECF1;font-size:12.5px;font-weight:400;line-height:1.5;padding:10px 12px;border-radius:6px;border:1px solid var(--navy-3);box-shadow:var(--shadow);opacity:0;visibility:hidden;transition:opacity .12s;z-index:60;text-transform:none;letter-spacing:0}
+.tip .tipbox::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--navy)}
+.tip:hover .tipbox,.tip:focus-within .tipbox{opacity:1;visibility:visible}
+
+/* ===== Report cards ===== */
+.rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.rep-card{border:1px solid var(--line);border-radius:var(--r);padding:13px 14px;background:var(--surface);display:flex;gap:11px;align-items:flex-start;transition:border-color .12s}
+.rep-card:hover{border-color:var(--gold)}
+.rep-card.unavailable{opacity:.5}
+.rep-card input{margin-top:3px;accent-color:var(--navy-3);width:16px;height:16px;flex:none}
+.rep-card .t{font-weight:600;font-size:14px}
+.rep-card .d{font-size:12.5px;color:var(--ink-soft);margin-top:2px}
+.rep-card .why{font-size:11.5px;color:var(--gold);margin-top:4px;font-weight:600}
+
+/* ===== Results / charts ===== */
+.result{border:1px solid var(--line);border-radius:8px;margin-bottom:20px;background:var(--surface);overflow:hidden}
+.result-head{background:var(--surface-2);padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.result-head h3{font-size:16px}
+.result-body{padding:16px}
+.narrative{background:var(--info-bg);border-left:4px solid var(--navy-3);border-radius:0 var(--r) var(--r) 0;padding:12px 15px;font-size:14px;margin-bottom:14px}
+[data-theme="dark"] .narrative{border-left-color:var(--gold)}
+.chartbox{position:relative;height:320px;margin:14px 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:var(--r);padding:10px 12px;background:var(--surface)}
+.kpi .v{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;color:var(--navy-3)}
+[data-theme="dark"] .kpi .v{color:var(--gold)}
+.kpi .l{font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.5px}
+
+/* ===== Ledger (change log signature element) ===== */
+.ledger{font-family:'IBM Plex Mono',monospace;font-size:12.3px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.ledger-head{background:var(--navy-2);color:var(--gold-soft);padding:8px 14px;letter-spacing:1px;font-size:11px;text-transform:uppercase;display:flex;justify-content:space-between}
+.ledger-row{display:grid;grid-template-columns:34px 150px 1fr;gap:10px;padding:7px 14px;border-bottom:1px dashed var(--line)}
+.ledger-row:nth-child(even){background:var(--surface-2)}
+.ledger-row .n{color:var(--ink-soft)}
+.ledger-row .what b{font-weight:500;color:var(--ok)}
+.ledger-row .what s{color:var(--err);text-decoration-thickness:1px}
+.ledger-empty{padding:16px;color:var(--ink-soft);text-align:center;font-family:'Public Sans',sans-serif}
+
+/* ===== Modal ===== */
+.modal-bg{position:fixed;inset:0;background:rgba(10,34,64,.55);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border-radius:8px;border-top:4px solid var(--gold);max-width:760px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow)}
+.modal .m-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+.modal .m-head h3{font-size:18px}
+.modal .m-head .x{margin-left:auto;background:none;border:none;font-size:20px;color:var(--ink-soft);padding:2px 8px}
+.modal .m-body{padding:20px}
+.modal .m-body h4{font-family:'Source Serif 4',serif;margin:16px 0 6px;font-size:15px}
+.modal .m-body p,.modal .m-body li{font-size:13.8px;color:var(--ink);margin-bottom:6px}
+.modal .m-body ol,.modal .m-body ul{padding-left:22px;margin-bottom:8px}
+
+/* ===== Misc ===== */
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grow{flex:1}
+.muted{color:var(--ink-soft);font-size:13px}
+.divider{border:none;border-top:1px solid var(--line);margin:16px 0}
+.banner{border-radius:var(--r);padding:11px 14px;font-size:13.5px;margin-bottom:14px;display:flex;gap:9px;align-items:flex-start}
+.banner-ok{background:var(--ok-bg);color:var(--ok)}
+.banner-info{background:var(--info-bg);color:var(--info)}
+.banner-warn{background:var(--warn-bg);color:var(--warn)}
+.hidden{display:none!important}
+.tabbar{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tab{background:none;border:none;border-bottom:3px solid transparent;padding:8px 14px;font-size:14px;font-weight:600;color:var(--ink-soft)}
+.tab.active{color:var(--navy-3);border-bottom-color:var(--gold)}
+[data-theme="dark"] .tab.active{color:var(--ink)}
+footer{border-top:1px solid var(--line);background:var(--surface);margin-top:30px}
+.foot-inner{max-width:1240px;margin:0 auto;padding:18px 24px;font-size:12.5px;color:var(--ink-soft);display:flex;gap:16px;flex-wrap:wrap}
+@media print{.masthead,.stepper,.mast-actions,.btn,footer,.dropzone{display:none!important}.panel{box-shadow:none;border:none}}
+@media (max-width:720px){.stepper-inner{overflow:auto}.mast-actions{width:100%;margin-left:0}}
+</style>
+</head>
+<body>
+
+<!-- ===== Masthead ===== -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="seal" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#C9A227" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 17 8 9l4 5 4-7 6 10z"/><circle cx="12" cy="4.5" r="1.6"/>
+      </svg>
+    </div>
+    <div class="mast-title">
+      <div class="sub">Montana Commissioner of Political Practices</div>
+      <h1>COPP Analytic Tool</h1>
+      <div class="motto">Oro y Plata &middot; Confidence, transparency, and accountability in Montana's democratic processes</div>
+    </div>
+    <div class="mast-actions">
+      <button class="btn-ghost" id="btnInstructions" type="button">&#9432; Instructions</button>
+      <button class="btn-ghost" id="btnSaveSession" type="button" title="Download a session file (data, corrections, reports) to resume later">&#8681; Save session</button>
+      <button class="btn-ghost" id="btnTheme" type="button" aria-label="Toggle light or dark mode">&#9788; Light / Dark</button>
+    </div>
+  </div>
+</header>
+
+<!-- ===== Phase stepper ===== -->
+<nav class="stepper" aria-label="Workflow phases">
+  <div class="stepper-inner">
+    <button class="step active" id="stepBtn1" type="button" data-phase="1"><span class="num">1</span> Upload &amp; Validate</button>
+    <button class="step" id="stepBtn2" type="button" data-phase="2" disabled><span class="num">2</span> Analyze &amp; Report</button>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ============ PHASE 1 ============ -->
+<section id="phase1">
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">Phase 1 &middot; Step A</span>
+      <h2>Upload dossiers</h2>
+      <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">Drop one or more CERS/DLam export files (.xlsx, .xls, or .csv). Files are read entirely in your browser. Nothing is transmitted to a server during upload or validation.</span></span>
+      <div class="right">
+        <button class="btn btn-outline btn-sm" id="btnSample" type="button">Load sample data</button>
+        <button class="btn btn-outline btn-sm" id="btnLoadSession" type="button">Resume saved session</button>
+        <button class="btn btn-danger btn-sm" id="btnClearAll" type="button">Clear all</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload files">
+        <svg class="dz-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div class="big">Drag and drop dossier files here</div>
+        <div class="hint">or click to browse &middot; accepts .xlsx, .xls, .csv &middot; multiple files supported</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple style="display:none">
+      </div>
+      <div class="filelist" id="fileList"></div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="previewPanel">
+    <div class="panel-head">
+      <span class="eyebrow">Phase 1 &middot; Step B</span>
+      <h2>Review data</h2>
+      <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">Select a file and sheet to preview. Column types and roles (amount, date, contributor, etc.) are detected automatically and drive both validation and the report library.</span></span>
+      <div class="right">
+        <select id="selFile" aria-label="Select file"></select>
+        <select id="selSheet" aria-label="Select sheet"></select>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="row" id="profileChips" style="margin-bottom:12px"></div>
+      <div class="tbl-scroll"><table class="data" id="previewTable"></table></div>
+      <p class="muted" style="margin-top:8px">Showing first 200 rows. Click any cell to edit it directly; manual edits are recorded in the change log.</p>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="issuesPanel">
+    <div class="panel-head">
+      <span class="eyebrow">Phase 1 &middot; Step C</span>
+      <h2>Error scan</h2>
+      <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">Checks for blank required values, duplicate rows, invalid or future dates, non-numeric amounts, negative amounts, stray whitespace, inconsistent capitalization, and malformed ZIP codes. Every correction, auto-fix, or acceptance is recorded for the final report.</span></span>
+      <div class="right">
+        <span id="issueSummary"></span>
+        <button class="btn btn-primary btn-sm" id="btnScan" type="button">Run error scan</button>
+        <button class="btn btn-gold btn-sm hidden" id="btnAutofixAll" type="button">Auto-fix all safe issues</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="issueFilters" class="row hidden" style="margin-bottom:12px">
+        <label class="muted">Show:</label>
+        <select id="selIssueFilter">
+          <option value="open">Open issues</option>
+          <option value="all">All issues</option>
+          <option value="resolved">Resolved issues</option>
+        </select>
+      </div>
+      <div id="issueList"><p class="muted">Run the error scan after uploading files. You can proceed to Phase 2 once issues are corrected or accepted.</p></div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="ledgerPanel">
+    <div class="panel-head">
+      <span class="eyebrow">Audit trail</span>
+      <h2>Change log</h2>
+      <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">An official record of every change made to the uploaded data: manual edits, auto-fixes, and issues accepted as-is. This log is appended to every exported report and can be downloaded separately.</span></span>
+      <div class="right">
+        <button class="btn btn-outline btn-sm" id="btnDlLedgerCsv" type="button">Download log (CSV)</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="ledger">
+        <div class="ledger-head"><span>Record of corrections</span><span id="ledgerCount">0 entries</span></div>
+        <div id="ledgerRows"><div class="ledger-empty">No changes recorded yet.</div></div>
+      </div>
+      <div class="row" style="margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-gold" id="btnToPhase2" type="button" disabled>Continue to Phase 2: Analyze &amp; Report &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ PHASE 2 ============ -->
+<section id="phase2" class="hidden">
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">Phase 2 &middot; Step A</span>
+      <h2>Choose analyses</h2>
+      <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">Pick from the prewritten report library, let the tool analyze your data and recommend a slate of reports, or write your own question in plain language. Reports marked unavailable need a column your data doesn't include.</span></span>
+      <div class="right">
+        <button class="btn btn-outline btn-sm" id="btnSelectAll" type="button">Select all available</button>
+        <button class="btn btn-primary btn-sm" id="btnSuggest" type="button">Analyze my data &amp; recommend reports</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="row" style="margin-bottom:12px">
+        <label class="muted">Analyze
+          <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">Choose what the reports run against. "All Transactions" is the consolidated table this tool builds from a dossier's per-year sheets (subtotals and banners removed). "All files combined" stacks every uploaded dossier with an Entity column, unlocking the cross-entity reports.</span></span>
+        </label>
+        <select id="selScope" style="min-width:260px"></select>
+        <div class="grow"></div>
+        <button class="btn btn-outline btn-sm" id="btnEnhanced" type="button" title="Exports an enhanced workbook for the current analysis scope: the original section sheets plus a generated Analysis sheet with consolidated line items and pivot blocks (spend by party, recipient concentration, quarterly, candidate vs committee).">&#8681; Enhanced workbook (adds Analysis sheet)</button>
+      </div>
+      <div class="tabbar" role="tablist">
+        <button class="tab active" id="tabLib" type="button">Prewritten report library</button>
+        <button class="tab" id="tabFree" type="button">Ask your own question</button>
+      </div>
+
+      <div id="paneLib">
+        <div id="suggestBanner"></div>
+        <div class="rep-grid" id="repGrid"></div>
+        <div class="row" style="margin-top:16px">
+          <label class="muted">Large-contribution threshold ($) <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">Used by the "Contributions over threshold" report. Set this to the applicable Montana contribution limit for the office and cycle being reviewed.</span></span></label>
+          <input type="number" id="inpThreshold" value="800" min="0" style="width:110px">
+          <div class="grow"></div>
+          <button class="btn btn-gold" id="btnRunReports" type="button">Run selected reports</button>
+        </div>
+      </div>
+
+      <div id="paneFree" class="hidden">
+        <p class="muted" style="margin-bottom:10px">Ask in plain language. Examples: <em>"total amount by contributor type"</em>, <em>"top 10 payees by amount"</em>, <em>"count contributions where city = Helena"</em>, <em>"average amount by month"</em>.</p>
+        <div class="row">
+          <input type="text" id="inpQuestion" class="grow" placeholder="e.g., total contributions by city where amount > 500" aria-label="Your question">
+          <button class="btn btn-gold" id="btnAsk" type="button">Run question</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label class="row" style="gap:6px"><input type="checkbox" id="chkAI"> Use AI assistant for narrative answers
+            <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">When deployed on Netlify with an ANTHROPIC_API_KEY environment variable, free-form questions are answered by Claude using only the most relevant rows retrieved from your data (a lightweight RAG). If the AI endpoint is unavailable, the built-in query engine answers instead.</span></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="resultsPanel">
+    <div class="panel-head">
+      <span class="eyebrow">Phase 2 &middot; Step B</span>
+      <h2>Results</h2>
+      <div class="right">
+        <button class="btn btn-outline btn-sm" id="btnClearResults" type="button">Clear results</button>
+        <button class="btn btn-primary" id="btnDlAllXlsx" type="button">&#8681; Full report (XLSX)</button>
+        <button class="btn btn-primary" id="btnDlAllPdf" type="button">&#8681; Full report (PDF)</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="resultsArea"></div>
+      <div id="moreSuggest"></div>
+    </div>
+  </div>
+
+</section>
+</main>
+
+<!-- ===== Instructions modal ===== -->
+<div class="modal-bg" id="modalInstructions" role="dialog" aria-modal="true" aria-labelledby="insTitle">
+  <div class="modal">
+    <div class="m-head"><h3 id="insTitle">How to use the COPP Analytic Tool</h3><button class="x" type="button" data-close>&times;</button></div>
+    <div class="m-body">
+      <h4>Phase 1 — Upload &amp; Validate</h4>
+      <ol>
+        <li><strong>Upload</strong> one or more dossier files (.xlsx, .xls, or .csv) by dragging them onto the drop zone or clicking it. CERS and DLam exports work as-is. Entity dossiers with banner rows, multiple sections per sheet (Contributions Given / Received, Expenditures Made), per-year tabs, and subtotal rows are detected automatically: sections are consolidated into an <strong>All Transactions</strong> sheet with Entity, Year, Flow, Quarter, and Recipient Type columns derived, and subtotal rows excluded so totals are never double-counted.</li>
+        <li><strong>Review</strong> the data preview. The tool detects column types (amounts, dates, names, locations) automatically.</li>
+        <li><strong>Run the error scan.</strong> Each finding can be corrected inline, auto-fixed, or accepted as-is. You can also click any cell in the preview to edit it directly.</li>
+        <li>Every change is recorded in the <strong>change log</strong>, which is included in all exported reports for a complete audit trail.</li>
+      </ol>
+      <h4>Phase 2 — Analyze &amp; Report</h4>
+      <ol>
+        <li>Choose the <strong>analysis scope</strong>: the current sheet, the current file's consolidated All Transactions, or <strong>All files combined</strong>. Combined scope stacks every uploaded dossier with an Entity column and unlocks the cross-entity reports (shared counterparties, opposing activity, possible transfers).</li>
+        <li>Select reports from the <strong>prewritten library</strong>, or click <strong>Analyze my data</strong> to have the tool recommend a slate of reports based on the columns it found. You can select several, or all of them.</li>
+        <li>Or switch to <strong>Ask your own question</strong> and type a plain-language query. With AI enabled (Netlify deployment with an API key), answers are generated from the most relevant rows in your data.</li>
+        <li>Each result includes a written analysis, key figures, a chart, and a data table. The tool also <strong>suggests follow-up reports</strong> after each run.</li>
+        <li><strong>Download</strong> any single report or the full session as XLSX, CSV, or PDF. Every export includes the Phase 1 change log.</li>
+        <li><strong>Enhanced workbook</strong> exports a v2-style workbook for the current scope: every section sheet plus a generated <strong>Analysis</strong> sheet containing consolidated line items and four pivot blocks (spend by party, recipient concentration with cumulative share, expenditures by quarter, candidate vs committee/measure). With combined scope, the Analysis sheet carries an Entity column for cross-dossier work.</li>
+      </ol>
+      <h4>Privacy</h4>
+      <p>All parsing, validation, and built-in analysis run entirely in your browser. Data leaves your machine only if you enable the AI assistant, and then only the small set of rows relevant to your question is sent.</p>
+      <h4>Saving your work</h4>
+      <p>Use <em>Save session</em> in the header to download a session file containing your data, corrections, and results. Resume later with <em>Resume saved session</em>.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Edit-cell modal ===== -->
+<div class="modal-bg" id="modalEdit" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:480px">
+    <div class="m-head"><h3>Correct value</h3><button class="x" type="button" data-close>&times;</button></div>
+    <div class="m-body">
+      <p class="muted" id="editWhere"></p>
+      <p style="margin:8px 0">Current value: <span class="mono" id="editOld" style="background:var(--err-bg);padding:1px 6px;border-radius:4px"></span></p>
+      <label class="muted" for="editNew">New value</label>
+      <input type="text" id="editNew" style="width:100%;margin-top:4px">
+      <div class="row" style="margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-outline" type="button" data-close>Cancel</button>
+        <button class="btn btn-gold" id="btnEditSave" type="button">Save correction</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="foot-inner">
+    <span><strong>Montana COPP Analytic Tool</strong> &middot; v1.0</span>
+    <span>Built for the Office of the Commissioner of Political Practices</span>
+    <span>Data is processed locally in your browser unless the AI assistant is enabled.</span>
+    <span id="footStatus"></span>
+  </div>
+</footer>
+<input type="file" id="sessionInput" accept=".json" style="display:none">
+<script>
+/* ================= Montana COPP Analytic Tool — core ================= */
+const $=id=>document.getElementById(id);
+const App={
+  files:[],            // {name, sheets:{sheetName:{headers:[], rows:[[]]}}}
+  cur:{file:0,sheet:''},
+  profile:null,        // column profile of current dataset
+  issues:[],
+  changeLog:[],        // {ts,n,file,sheet,row,col,header,old,new,method,issueType}
+  results:[],          // {id,title,desc,narrative,kpis,columns,rows,chart:{type,labels,data,label},suggestions}
+  charts:{},
+  scanned:false
+};
+const fmt={
+  n:v=>Number(v).toLocaleString('en-US',{maximumFractionDigits:2}),
+  usd:v=>Number(v).toLocaleString('en-US',{style:'currency',currency:'USD'}),
+  esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+};
+
+/* ---------- theme ---------- */
+function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem('copp-theme',t)}catch(e){};Object.values(App.charts).forEach(c=>restyleChart(c));}
+$('btnTheme').onclick=()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
+try{const s=localStorage.getItem('copp-theme');if(s)setTheme(s);else if(matchMedia('(prefers-color-scheme: dark)').matches)setTheme('dark')}catch(e){}
+
+/* ---------- modals ---------- */
+document.querySelectorAll('.modal-bg').forEach(m=>{
+  m.addEventListener('click',e=>{if(e.target===m||e.target.dataset.close!==undefined)m.classList.remove('open')});
+});
+$('btnInstructions').onclick=()=>$('modalInstructions').classList.add('open');
+
+/* ---------- phases ---------- */
+function gotoPhase(p){
+  $('phase1').classList.toggle('hidden',p!==1);
+  $('phase2').classList.toggle('hidden',p!==2);
+  $('stepBtn1').classList.toggle('active',p===1);
+  $('stepBtn2').classList.toggle('active',p===2);
+  if(p===2){$('stepBtn1').classList.add('done');buildReportGrid();}
+  window.scrollTo({top:0});
+}
+$('stepBtn1').onclick=()=>gotoPhase(1);
+$('stepBtn2').onclick=()=>{if(!$('stepBtn2').disabled)gotoPhase(2)};
+$('btnToPhase2').onclick=()=>gotoPhase(2);
+function unlockPhase2(){
+  const open=App.issues.filter(i=>!i.resolved).length;
+  const ok=App.files.length>0 && App.scanned && open===0;
+  $('btnToPhase2').disabled=!ok; $('stepBtn2').disabled=!ok;
+  $('btnToPhase2').textContent= ok ? 'Continue to Phase 2: Analyze & Report →'
+    : (App.scanned? `Resolve or accept ${open} open issue${open===1?'':'s'} to continue` : 'Run the error scan to continue');
+}
+
+/*<<DOSSIER-CORE>>*/
+/* ===== Dossier-aware parsing & consolidation (COPP Analytic Tool) ===== */
+/* Handles CERS entity dossiers: banner rows, multiple titled sections per
+   sheet, subtotal rows, per-year sheets, and metadata sheets. Falls back to
+   plain row-1-header parsing for simple tables and CSVs. */
+
+function cellFilled(v){return String(v==null?'':v).trim()!=='';}
+function rowFilledCount(r){return r.reduce((a,c)=>a+(cellFilled(c)?1:0),0);}
+function isSubtotalRow(r){
+  return r.some(c=>/^(sub)?total:?$/i.test(String(c).trim())) && rowFilledCount(r)<=3;
+}
+function isBannerRow(r){
+  const a=String(r[0]||'').trim();
+  return rowFilledCount(r)===1 && (/^MT Campaign Finance/i.test(a)||/^Generated /i.test(a));
+}
+function entityFromText(s){const m=/entity[\s_\-]*?(\d{3,})/i.exec(String(s));return m?m[1]:null;}
+
+/* Returns {plain:true} if the sheet is an ordinary table, else parsed sections */
+function parseSheetSmart(aoa){
+  const rows=aoa.filter(r=>r&&r.length);
+  // plain table heuristic: first non-empty row already looks like a header row
+  let firstIdx=rows.findIndex(r=>rowFilledCount(r)>0);
+  if(firstIdx===-1)return{sections:[]};
+  const looksStructured = rows.some(isBannerRow) ||
+    (rowFilledCount(rows[firstIdx])<=2 && rows.some(r=>rowFilledCount(r)>=4));
+  if(!looksStructured){
+    const headers=rows[firstIdx].map((h,i)=>String(h||`Column ${i+1}`).trim());
+    const body=rows.slice(firstIdx+1).filter(r=>rowFilledCount(r)>0)
+      .map(r=>headers.map((_,i)=>String(r[i]??'')));
+    return{plain:true,sections:[{title:'',headers,rows:body}]};
+  }
+  // structured dossier sheet: walk rows, find titled sections
+  const sections=[]; let i=0; let entity=null;
+  while(i<rows.length){
+    const r=rows[i];
+    if(isBannerRow(r)){entity=entity||entityFromText(r[0]);i++;continue;}
+    if(rowFilledCount(r)===0){i++;continue;}
+    if(rowFilledCount(r)===1||rowFilledCount(r)===2){
+      // candidate section title; header row must follow within 2 rows
+      const title=String(r.find(cellFilled)||'').trim();
+      let j=i+1;
+      while(j<rows.length&&rowFilledCount(rows[j])===0)j++;
+      if(j<rows.length&&rowFilledCount(rows[j])>=3&&!isSubtotalRow(rows[j])){
+        const headers=rows[j].map((h,k)=>String(h||'').trim()).filter((h,k,arr)=>true);
+        // trim trailing blank headers
+        let last=headers.length; while(last>0&&headers[last-1]==='')last--;
+        const H=headers.slice(0,last).map((h,k)=>h||`Column ${k+1}`);
+        const body=[];
+        let k=j+1;
+        for(;k<rows.length;k++){
+          const rr=rows[k];
+          const fc=rowFilledCount(rr);
+          if(fc===0){ // blank: section ends only if next non-blank is a new title/banner
+            let n=k+1; while(n<rows.length&&rowFilledCount(rows[n])===0)n++;
+            if(n>=rows.length)break;
+            const nf=rowFilledCount(rows[n]);
+            if(nf<=2||isBannerRow(rows[n]))break;
+            continue;
+          }
+          if(isSubtotalRow(rr))continue;
+          if(fc<=2&&!cellFilled(rr[0])===false&&rowFilledCount(rr)<=2&&k>j+1&&!rr.slice(0,3).some(cellFilled)){continue;}
+          if(fc<=2&&cellFilled(rr[0])&&!cellFilled(rr[1])&&body.length){ // looks like next title with no blank line
+            break;
+          }
+          body.push(H.map((_,ci)=>String(rr[ci]??'')));
+        }
+        sections.push({title,headers:H,rows:body});
+        i=k;continue;
+      }
+      // single-value row that's not a title (e.g. inline note) — skip
+      i++;continue;
+    }
+    // data-like row with no preceding title: treat as headerless table start
+    const headers=r.map((h,k)=>String(h||`Column ${k+1}`).trim());
+    const body=[];let k=i+1;
+    for(;k<rows.length;k++){const rr=rows[k];if(rowFilledCount(rr)===0)break;if(isSubtotalRow(rr))continue;
+      body.push(headers.map((_,ci)=>String(rr[ci]??'')));}
+    sections.push({title:'',headers,rows:body});
+    i=k;
+  }
+  return{sections,entity};
+}
+
+const META_SHEET=/^(summary|contact|source reports|registrations|analysis)$/i;
+const YEAR_SHEET=/^(19|20)\d{2}$/;
+
+/* Canonical consolidated columns for All Transactions */
+const TX_COLS=['Entity','Year','Flow','Date','Counterparty','Office','Party','Election',
+ 'Supporting / opposing','Description','Purpose','Platform','Quantity','Refund','Corp Funds',
+ 'Electioneering','Amount','Schedule','Report ID','Quarter','Recipient Type'];
+
+function quarterOf(dateStr){
+  const m=/^(\d{4})-(\d{2})/.exec(String(dateStr).trim());
+  if(!m)return'';
+  return `${m[1]}-Q${Math.ceil(+m[2]/3)}`;
+}
+function norm0(v){const s=String(v).trim();return s==='0'?'':s;}
+
+/* Build the consolidated transaction table for one parsed dossier file */
+function buildConsolidated(parsedSheets, entityId){
+  const out=[];
+  for(const ps of parsedSheets){
+    if(!YEAR_SHEET.test(ps.sheetName))continue;
+    const year=ps.sheetName;
+    for(const sec of ps.sections){
+      const H=sec.headers, hIdx={}; H.forEach((h,i)=>hIdx[h.toLowerCase()]=i);
+      const get=(r,...names)=>{for(const n of names){const i=hIdx[n.toLowerCase()];if(i!=null&&cellFilled(r[i]))return String(r[i]).trim();}return'';};
+      const flow=/received/i.test(sec.title)?'Contribution Received'
+        :/contribution/i.test(sec.title)?'Contribution Given'
+        :/expenditure/i.test(sec.title)?'Expenditure':(sec.title||'Transaction');
+      for(const r of sec.rows){
+        const date=get(r,'Date');
+        const office=norm0(get(r,'Office'));
+        const amt=get(r,'Amount');
+        if(!date&&!amt)continue;
+        out.push([entityId||'',year,flow,date,
+          get(r,'Counterparty','Donor','Payee','Recipient','Name'),
+          office,norm0(get(r,'Party')),get(r,'Election'),
+          get(r,'Supporting / opposing','Supporting/Opposing'),
+          get(r,'Description'),get(r,'Purpose'),get(r,'Platform'),
+          get(r,'Quantity','Line item detail')&&get(r,'Quantity')||get(r,'Quantity'),
+          get(r,'Refund'),get(r,'Corp Funds'),get(r,'Electioneering'),
+          amt,get(r,'Schedule'),get(r,'Report ID'),
+          quarterOf(date),
+          flow==='Expenditure'?(office?'Candidate':'Committee/Measure'):'']);
+      }
+    }
+  }
+  // sort newest first
+  out.sort((a,b)=>String(b[3]).localeCompare(String(a[3])));
+  return{headers:TX_COLS.slice(),rows:out};
+}
+
+/* Parse one workbook's aoa map into the App.files entry */
+function parseDossierFile(fileName, aoaBySheet){
+  let entity=entityFromText(fileName);
+  const parsedSheets=[]; const sheets={}; let structured=false;
+  for(const [sn,aoa] of Object.entries(aoaBySheet)){
+    const p=parseSheetSmart(aoa);
+    if(!p.sections.length)continue;
+    if(!p.plain)structured=true;
+    entity=entity||p.entity||null;
+    parsedSheets.push({sheetName:sn,sections:p.sections,plain:!!p.plain});
+  }
+  if(!structured){
+    // simple workbook: keep current behaviour, one sheet per tab
+    for(const ps of parsedSheets){const s=ps.sections[0];sheets[ps.sheetName]={headers:s.headers,rows:s.rows};}
+    return{name:fileName,sheets,entity:null,dossier:false};
+  }
+  const consolidated=buildConsolidated(parsedSheets,entity);
+  if(consolidated.rows.length)sheets['All Transactions']=consolidated;
+  for(const ps of parsedSheets){
+    if(/^summary$/i.test(ps.sheetName))continue; // derived; regenerated by reports
+    if(/^analysis$/i.test(ps.sheetName))continue; // we generate our own
+    if(YEAR_SHEET.test(ps.sheetName)){
+      for(const sec of ps.sections){
+        if(!sec.rows.length)continue;
+        sheets[`${ps.sheetName} · ${sec.title||'Data'}`]={headers:sec.headers,rows:sec.rows};
+      }
+    }else{
+      const sec=ps.sections.find(s=>s.rows.length);
+      if(sec)sheets[ps.sheetName]={headers:sec.headers,rows:sec.rows};
+    }
+  }
+  return{name:fileName,sheets,entity,dossier:true};
+}
+
+/* Combined dataset across all loaded files that have an All Transactions sheet */
+function combineFiles(files){
+  const rows=[];
+  files.forEach(f=>{
+    const t=f.sheets&&f.sheets['All Transactions']; if(!t)return;
+    t.rows.forEach(r=>{
+      const rr=r.slice();
+      if(!cellFilled(rr[0]))rr[0]=f.entity||f.name.replace(/\.(xlsx|xls|csv)$/i,'');
+      rows.push(rr);
+    });
+  });
+  rows.sort((a,b)=>String(b[3]).localeCompare(String(a[3])));
+  return{headers:TX_COLS.slice(),rows};
+}
+
+
+/* ===== Dossier analysis helpers (pure; operate on {headers,rows}) ===== */
+function TXi(t){const m={};t.headers.forEach((h,i)=>m[h]=i);return m;}
+function dnum(v){const n=toNum(v);return n==null?0:n;}
+function pct(n,d){return d?n/d:0;}
+
+/* 1. Spend by Party x Year (expenditures) */
+function pivotPartyYear(t){
+  const i=TXi(t);const years=[...new Set(t.rows.map(r=>r[i.Year]).filter(Boolean))].sort();
+  const g={};
+  t.rows.forEach(r=>{if(r[i.Flow]!=='Expenditure')return;
+    const p=r[i.Party]||'None / Committee';(g[p]=g[p]||{});g[p][r[i.Year]]=(g[p][r[i.Year]]||0)+dnum(r[i.Amount]);});
+  const rows=Object.entries(g).map(([p,by])=>{
+    const vals=years.map(y=>by[y]||0);return[p,...vals,vals.reduce((a,b)=>a+b,0)];
+  }).sort((a,b)=>b[b.length-1]-a[a.length-1]);
+  const tot=['Total',...years.map((y,k)=>rows.reduce((a,r)=>a+r[k+1],0)),rows.reduce((a,r)=>a+r[r.length-1],0)];
+  return{cols:['Party',...years,'Total'],rows:[...rows,tot]};
+}
+
+/* 2. Recipient concentration: top N + % + cumulative % */
+function concentration2(t,topN){
+  topN=topN||10;const i=TXi(t);
+  const g={};let total=0;
+  t.rows.forEach(r=>{if(r[i.Flow]!=='Expenditure')return;const k=r[i.Counterparty]||'(blank)';
+    const n=dnum(r[i.Amount]);g[k]=(g[k]||0)+n;total+=n;});
+  const sorted=Object.entries(g).sort((a,b)=>b[1]-a[1]);
+  const top=sorted.slice(0,topN);const others=sorted.slice(topN).reduce((a,[,v])=>a+v,0);
+  let cum=0;const rows=top.map(([k,v])=>{cum+=v;return[k,v,pct(v,total),pct(cum,total)];});
+  if(others>0){cum+=others;rows.push(['All others',others,pct(others,total),pct(cum,total)]);}
+  rows.push(['Total',total,1,'']);
+  return{cols:['Recipient','Total','% of Total','Cumulative %'],rows,total,topShare:pct(top.reduce((a,[,v])=>a+v,0),total)};
+}
+
+/* 3. Expenditures by quarter */
+function byQuarter(t){
+  const i=TXi(t);const g={};
+  t.rows.forEach(r=>{if(r[i.Flow]!=='Expenditure')return;const q=r[i.Quarter]||'(undated)';
+    g[q]=(g[q]||0)+dnum(r[i.Amount]);});
+  const rows=Object.entries(g).sort((a,b)=>a[0].localeCompare(b[0]));
+  return{cols:['Quarter','Expenditures'],rows:[...rows,['Total',rows.reduce((a,[,v])=>a+v,0)]]};
+}
+
+/* 4. Candidate vs Committee/Measure by year */
+function candVsCmte2(t){
+  const i=TXi(t);const years=[...new Set(t.rows.map(r=>r[i.Year]).filter(Boolean))].sort();
+  const g={};years.forEach(y=>g[y]={c:0,m:0});
+  t.rows.forEach(r=>{if(r[i.Flow]!=='Expenditure')return;const y=r[i.Year];if(!g[y])return;
+    if(r[i['Recipient Type']]==='Candidate')g[y].c+=dnum(r[i.Amount]);else g[y].m+=dnum(r[i.Amount]);});
+  const rows=years.map(y=>[y,g[y].m,g[y].c,g[y].m+g[y].c]);
+  rows.push(['Total',rows.reduce((a,r)=>a+r[1],0),rows.reduce((a,r)=>a+r[2],0),rows.reduce((a,r)=>a+r[3],0)]);
+  return{cols:['Year','Committee/Measure','Candidate','Total'],rows};
+}
+
+/* 5. Support vs Oppose by target (parses "Supporting / opposing") */
+function supportOppose2(t){
+  const i=TXi(t),si=i['Supporting / opposing'];const g={};
+  t.rows.forEach(r=>{
+    const v=String(r[si]||'').trim();if(!v)return;
+    const m=/^(support(?:ing)?|oppose|opposing)\s+(.+)$/i.exec(v);
+    const stance=m?(/^opp/i.test(m[1])?'oppose':'support'):'support';
+    const target=(m?m[2]:v).trim();
+    (g[target]=g[target]||{support:0,oppose:0,entities:{}});
+    g[target][stance]+=dnum(r[i.Amount]);
+    (g[target].entities[r[i.Entity]]=g[target].entities[r[i.Entity]]||{support:0,oppose:0})[stance]+=dnum(r[i.Amount]);
+  });
+  const rows=Object.entries(g).map(([k,v])=>[k,v.support,v.oppose,v.support+v.oppose])
+    .sort((a,b)=>b[3]-a[3]);
+  return{cols:['Target','Support $','Oppose $','Total $'],rows,raw:g};
+}
+
+/* 6. Compliance flags */
+function flags2(t){
+  const i=TXi(t);
+  const pick=(col,val)=>t.rows.filter(r=>String(r[i[col]]).trim().toUpperCase()===val);
+  const blocks=[['Electioneering = Y','Electioneering'],['Corporate funds = Y','Corp Funds'],['Refund = Y','Refund']];
+  const rows=[];
+  blocks.forEach(([label,col])=>{const hits=pick(col,'Y');
+    rows.push([label,hits.length,hits.reduce((a,r)=>a+dnum(r[i.Amount]),0)]);});
+  return{cols:['Flag','Transactions','Total $'],rows};
+}
+
+/* 7. Amendment-aware duplicates: identical except Report ID */
+function amendedDupes(t){
+  const i=TXi(t),ri=i['Report ID'];
+  const key=r=>r.map((c,ci)=>ci===ri?'':String(c).trim().toLowerCase()).join('\u0001');
+  const seen={},exact={},pairs=[],exactPairs=[];
+  t.rows.forEach((r,ridx)=>{
+    const ke=r.map(c=>String(c).trim().toLowerCase()).join('\u0001');
+    if(exact[ke]!=null)exactPairs.push([exact[ke],ridx]);else exact[ke]=ridx;
+    const k=key(r);
+    if(seen[k]!=null){const o=t.rows[seen[k]];
+      if(String(o[ri])!==String(r[ri]))pairs.push([seen[k],ridx]);}
+    else seen[k]=ridx;
+  });
+  const rows=pairs.map(([a,b])=>{const ra=t.rows[a],rb=t.rows[b];
+    return[ra[i.Entity],ra[i.Date],ra[i.Counterparty],dnum(ra[i.Amount]),ra[ri],rb[ri]];});
+  return{cols:['Entity','Date','Counterparty','Amount','Report ID (1st)','Report ID (2nd)'],rows,
+    exactCount:exactPairs.length,
+    note:'Same transaction reported under two Report IDs usually means an amended filing restates the line. Verify against report status before treating either as a true duplicate; only one should be counted in totals.'};
+}
+
+/* 8. Cross-entity shared counterparties (combined scope) */
+function sharedCounterparties(t){
+  const i=TXi(t);const g={};
+  t.rows.forEach(r=>{const k=String(r[i.Counterparty]||'').trim();if(!k)return;
+    (g[k]=g[k]||{});(g[k][r[i.Entity]]=g[k][r[i.Entity]]||0);g[k][r[i.Entity]]+=dnum(r[i.Amount]);});
+  const entities=[...new Set(t.rows.map(r=>r[i.Entity]))];
+  const rows=Object.entries(g).filter(([,e])=>Object.keys(e).length>1)
+    .map(([k,e])=>[k,...entities.map(en=>e[en]||0),Object.values(e).reduce((a,b)=>a+b,0)])
+    .sort((a,b)=>b[b.length-1]-a[a.length-1]);
+  return{cols:['Counterparty',...entities.map(e=>'Entity '+e),'Total'],rows,entities};
+}
+
+/* 9. Cross-purpose conflicts: same target, opposite stances or opposing entities */
+function crossPurpose2(t){
+  const i=TXi(t);
+  const so=supportOppose2(t);
+  const conflicts=[];
+  // (a) one entity opposes a person another entity pays as a candidate
+  const candSpend={};
+  t.rows.forEach(r=>{if(r[i['Recipient Type']]!=='Candidate')return;
+    const k=String(r[i.Counterparty]).trim();(candSpend[k]=candSpend[k]||{});
+    candSpend[k][r[i.Entity]]=(candSpend[k][r[i.Entity]]||0)+dnum(r[i.Amount]);});
+  Object.entries(so.raw).forEach(([target,v])=>{
+    Object.entries(v.entities).forEach(([ent,s])=>{
+      if(s.oppose>0&&candSpend[target]){
+        Object.entries(candSpend[target]).forEach(([ent2,amt])=>{
+          if(ent2!==ent)conflicts.push([target,'Entity '+ent2+' spent for','Entity '+ent+' spent opposing',amt,s.oppose]);
+        });
+      }
+      if(s.support>0&&s.oppose>0)conflicts.push([target,'Entity '+ent+' supported','Entity '+ent+' also opposed',s.support,s.oppose]);
+    });
+    // opposite stances across entities
+    const ents=Object.entries(v.entities);
+    for(let a=0;a<ents.length;a++)for(let b=0;b<ents.length;b++){
+      if(a===b)continue;
+      if(ents[a][1].support>0&&ents[b][1].oppose>0)
+        conflicts.push([target,'Entity '+ents[a][0]+' supported','Entity '+ents[b][0]+' opposed',ents[a][1].support,ents[b][1].oppose]);
+    }
+  });
+  // dedupe
+  const seen={};const rows=conflicts.filter(c=>{const k=c.join('|');if(seen[k])return false;seen[k]=1;return true;});
+  return{cols:['Candidate / target','Side A','Side B','Side A $','Side B $'],rows};
+}
+
+/* 10. Possible inter-entity transfers: Given in one entity matches Received in another (date+amount) */
+function transfers2(t){
+  const i=TXi(t);
+  const given=t.rows.filter(r=>r[i.Flow]==='Contribution Given');
+  const recv=t.rows.filter(r=>r[i.Flow]==='Contribution Received');
+  const rows=[];
+  given.forEach(g=>{recv.forEach(rc=>{
+    if(g[i.Entity]===rc[i.Entity])return;
+    if(g[i.Date]&&g[i.Date]===rc[i.Date]&&dnum(g[i.Amount])===dnum(rc[i.Amount])&&dnum(g[i.Amount])>0)
+      rows.push([g[i.Date],'Entity '+g[i.Entity]+' → '+g[i.Counterparty],'Entity '+rc[i.Entity]+' ← '+rc[i.Counterparty],dnum(g[i.Amount])]);
+  });});
+  return{cols:['Date','Giver (reported)','Receiver (reported)','Amount'],rows};
+}
+
+/* 11. Filing hygiene from a Source Reports sheet {headers,rows} */
+function filingHygiene(sr){
+  const m={};sr.headers.forEach((h,i)=>m[h.toLowerCase()]=i);
+  const st=m['status'],ft=m['filing type'],od=m['original document on file'],
+        rd=m['received date'],pt=m['period to'];
+  const total=sr.rows.length;
+  const count=(idx,val)=>sr.rows.filter(r=>String(r[idx]).trim().toUpperCase()===val).length;
+  const amended=count(st,'AMEND'),incrp=count(st,'INCRP'),filed=count(st,'FILED');
+  const noDoc=od!=null?sr.rows.filter(r=>/^no$/i.test(String(r[od]).trim())).length:0;
+  let lagSum=0,lagN=0,late=[];
+  if(rd!=null&&pt!=null)sr.rows.forEach(r=>{
+    const a=new Date(r[pt]),b=new Date(r[rd]);
+    if(!isNaN(a)&&!isNaN(b)){const days=Math.round((b-a)/86400000);lagSum+=days;lagN++;
+      if(days>5)late.push([r[m['report id']],r[pt],r[rd],days]);}
+  });
+  return{summary:[['Reports on file',total],['Filed (original)',filed],['Amended',amended],
+    ['Amendment rate',total?(amended/total):0],['Pre-election notices (INCRP)',incrp],
+    ['Original document on file = No',noDoc],['Avg days received after period end',lagN?+(lagSum/lagN).toFixed(1):'—']],
+    late,lateCols:['Report ID','Period To','Received','Days after period end']};
+}
+
+/* 12. Contact normalization clusters */
+function contactClusters(ct){
+  const m={};ct.headers.forEach((h,i)=>m[h.toLowerCase()]=i);
+  const vi=m['value']!=null?m['value']:ct.headers.length-1;
+  const norm=s=>String(s).toLowerCase().replace(/p\.?\s*o\.?\s*box/g,'pobox')
+    .replace(/\bstreet\b/g,'st').replace(/\bavenue\b/g,'ave').replace(/\bsuite\b/g,'ste')
+    .replace(/\bwest\b/g,'w').replace(/\beast\b/g,'e').replace(/\bnorth\b/g,'n').replace(/\bsouth\b/g,'s')
+    .replace(/[^a-z0-9]/g,'');
+  const g={};
+  ct.rows.forEach(r=>{const v=String(r[vi]).trim();if(!v)return;const k=norm(v);
+    (g[k]=g[k]||{});g[k][v]=(g[k][v]||0)+1;});
+  const rows=Object.values(g).map(vars=>{
+    const names=Object.entries(vars).sort((a,b)=>b[1]-a[1]);
+    const uses=names.reduce((a,[,n])=>a+n,0);
+    return[names[0][0],names.length,uses,names.slice(1).map(([n])=>n).join(' | ')];
+  }).sort((a,b)=>b[1]-a[1]||b[2]-a[2]);
+  return{cols:['Canonical (most used)','Variants','Uses','Other spellings'],rows,
+    distinct:rows.length,variantClusters:rows.filter(r=>r[1]>1).length};
+}
+
+/* Enhanced workbook Analysis sheet as AoA (values, v2 layout) */
+function buildAnalysisAoA(t,label){
+  const i=TXi(t);
+  const lineCols=['Year','Date','Counterparty','Office','Party','Election','Amount','Type','Quarter'];
+  const multi=new Set(t.rows.map(r=>r[i.Entity])).size>1;
+  if(multi)lineCols.unshift('Entity');
+  const exp=t.rows.filter(r=>r[i.Flow]==='Expenditure');
+  const line=exp.map(r=>{
+    const base=[r[i.Year],r[i.Date],r[i.Counterparty],r[i.Office],r[i.Party],r[i.Election],
+      dnum(r[i.Amount]),r[i['Recipient Type']]||'Committee/Measure',r[i.Quarter]];
+    return multi?[r[i.Entity],...base]:base;
+  });
+  const off=lineCols.length+1; // one blank spacer column, pivots start after
+  const p1=pivotPartyYear(t),p2=concentration2(t,10),p3=byQuarter(t),p4=candVsCmte2(t);
+  const aoa=[];
+  aoa.push([`Expenditure Analysis — ${label}`]);
+  aoa.push(['Consolidated line-item detail. Pivot blocks at right are computed values.']);
+  aoa.push([...lineCols]);
+  const put=(rowIdx,colIdx,vals)=>{aoa[rowIdx]=aoa[rowIdx]||[];
+    while(aoa[rowIdx].length<colIdx)aoa[rowIdx].push('');
+    vals.forEach((v,k)=>aoa[rowIdx][colIdx+k]=v);};
+  line.forEach((r,k)=>{aoa[3+k]=r;});
+  let row=1;
+  put(row++,off,['1 · Spend by Party (by year)']);put(row++,off,p1.cols);
+  p1.rows.forEach(r=>put(row++,off,r));row++;
+  put(row++,off,['2 · Recipient Concentration (top 10)']);put(row++,off,p2.cols);
+  p2.rows.forEach(r=>put(row++,off,r));row++;
+  put(row++,off,['3 · Expenditures by Quarter']);put(row++,off,p3.cols);
+  p3.rows.forEach(r=>put(row++,off,r));row++;
+  put(row++,off,['4 · Committee/Measure vs Candidate (by year)']);put(row++,off,p4.cols);
+  p4.rows.forEach(r=>put(row++,off,r));
+  return aoa;
+}
+
+
+/*<<END DOSSIER-CORE>>*/
+
+/* ---------- file ingestion ---------- */
+const dz=$('dropzone'), fi=$('fileInput');
+dz.onclick=()=>fi.click();
+dz.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')fi.click()};
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag')}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag')}));
+dz.addEventListener('drop',e=>handleFiles(e.dataTransfer.files));
+fi.onchange=()=>handleFiles(fi.files);
+
+async function handleFiles(list){
+  for(const f of list){
+    if(!/\.(xlsx|xls|csv)$/i.test(f.name)){alert(`${f.name}: unsupported file type. Use .xlsx, .xls, or .csv.`);continue;}
+    try{
+      const buf=await f.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array',cellDates:true});
+      const aoaBySheet={};
+      wb.SheetNames.forEach(sn=>{
+        const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:false,defval:''});
+        if(aoa.length)aoaBySheet[sn]=aoa;
+      });
+      const parsed=parseDossierFile(f.name,aoaBySheet);
+      if(!Object.keys(parsed.sheets).length){alert(`${f.name}: no readable data found.`);continue;}
+      App.files.push(parsed);
+      if(parsed.dossier)$('footStatus').textContent=`Dossier structure detected in ${f.name}${parsed.entity?` (Entity ${parsed.entity})`:''}: sections were consolidated into an "All Transactions" sheet; subtotal and banner rows were excluded.`;
+    }catch(err){alert(`Could not read ${f.name}: ${err.message}`);}
+  }
+  fi.value='';
+  if(App.files.length){App.cur={file:App.files.length-1,sheet:Object.keys(App.files[App.files.length-1].sheets)[0]};}
+  App.scanned=false; App.issues=[];
+  refreshAll();
+}
+
+function curData(){
+  const f=App.files[App.cur.file]; if(!f)return null;
+  const s=f.sheets[App.cur.sheet]||f.sheets[Object.keys(f.sheets)[0]];
+  return s?{file:f,sheet:s,fileName:f.name,sheetName:App.cur.sheet}:null;
+}
+
+/* ---------- column profiling ---------- */
+const ROLE_HINTS={ // checked in order; more specific roles first
+  entity:/^entity$/i, flow:/^flow$/i, year:/^year$/i, quarter:/^quarter$/i,
+  party:/^party$/i, office:/^office$/i, election:/^election$/i,
+  support:/supporting/i, reportid:/^report id$/i,
+  type:/type|category|class\b|kind\b/i,
+  payee:/payee|vendor|recipient|paid to|counterparty/i,
+  zip:/zip|postal/i, city:/city|town/i, state:/^state$/i,
+  occupation:/occupation/i, employer:/employer/i,
+  amount:/amount|amt|total|value|payment|contribution\b|expend|sum|\$/i,
+  date:/date|received|filed|period|reported/i,
+  committee:/committee|candidate|filer|campaign/i,
+  contributor:/contributor|donor|name|first|last|entity|individual/i
+};
+function profileColumns(d){
+  const p=d.sheet.headers.map((h,ci)=>{
+    const vals=d.sheet.rows.map(r=>r[ci]).filter(v=>String(v).trim()!=='');
+    let num=0,date=0;
+    const sample=vals.slice(0,500);
+    sample.forEach(v=>{
+      const cl=String(v).replace(/[$,\s]/g,'');
+      if(cl!==''&&!isNaN(cl))num++;
+      if(parseDate(v))date++;
+    });
+    const isNum=sample.length&&num/sample.length>0.85;
+    const isDate=!isNum&&sample.length&&date/sample.length>0.7;
+    let role='text';
+    for(const[r,rx]of Object.entries(ROLE_HINTS)){if(rx.test(h)){role=r;break;}}
+    if(role==='text'&&isNum)role='number';
+    if(isDate&&role!=='date'&&/date/i.test(h)===false&&role==='text')role='date';
+    return {header:h,idx:ci,type:isNum?'number':(isDate?'date':'text'),role,filled:vals.length,total:d.sheet.rows.length,unique:new Set(vals.map(v=>String(v).toLowerCase())).size};
+  });
+  App.profile=p; return p;
+}
+function colByRole(role){return (App.profile||[]).find(c=>c.role===role&&(role!=='amount'||c.type==='number'))|| (App.profile||[]).find(c=>c.role===role);}
+function firstNumCol(){return colByRole('amount')||(App.profile||[]).find(c=>c.type==='number');}
+function firstDateCol(){return colByRole('date')||(App.profile||[]).find(c=>c.type==='date');}
+function parseDate(v){
+  if(v==null||String(v).trim()==='')return null;
+  const s=String(v).trim();
+  if(/^\d+(\.\d+)?$/.test(s)&&+s>20000&&+s<60000){ // excel serial
+    const d=new Date(Math.round((+s-25569)*86400000)); return isNaN(d)?null:d;
+  }
+  if(!/[\/\-\.]|\b(19|20)\d{2}\b/.test(s))return null;
+  const d=new Date(s); return isNaN(d)?null:d;
+}
+function toNum(v){const c=String(v).replace(/[$,\s()]/g,m=>m==='('?'-':'');return c===''||isNaN(c)?null:+c;}
+
+/* ---------- rendering: files, preview, profile ---------- */
+function refreshAll(){renderFileList();renderSelectors();renderPreview();renderIssues();renderLedger();unlockPhase2();
+  const has=App.files.length>0;
+  ['previewPanel','issuesPanel','ledgerPanel'].forEach(id=>$(id).classList.toggle('hidden',!has));
+}
+function renderFileList(){
+  $('fileList').innerHTML=App.files.map((f,i)=>{
+    const sn=Object.keys(f.sheets), rows=sn.reduce((a,s)=>a+f.sheets[s].rows.length,0);
+    return `<div class="filechip"><span>&#128196;</span><strong>${fmt.esc(f.name)}</strong>
+      ${f.entity?`<span class="pill pill-info" title="Entity ID detected from the dossier">Entity ${fmt.esc(f.entity)}</span>`:''}${f.dossier?`<span class="pill pill-ok" title="Multi-section dossier consolidated into All Transactions">dossier</span>`:''}
+      <span class="meta">${sn.length} sheet${sn.length>1?'s':''} · ${rows.toLocaleString()} rows</span>
+      <button class="x" title="Remove file" onclick="removeFile(${i})">&times;</button></div>`;
+  }).join('');
+}
+function removeFile(i){
+  if(!confirm(`Remove ${App.files[i].name}? Its issues and pending corrections will be discarded (logged changes remain in the change log).`))return;
+  App.files.splice(i,1); App.cur={file:0,sheet:App.files[0]?Object.keys(App.files[0].sheets)[0]:''};
+  App.scanned=false; App.issues=[]; refreshAll();
+}
+function renderSelectors(){
+  $('selFile').innerHTML=App.files.map((f,i)=>`<option value="${i}" ${i===App.cur.file?'selected':''}>${fmt.esc(f.name)}</option>`).join('');
+  const f=App.files[App.cur.file];
+  $('selSheet').innerHTML=f?Object.keys(f.sheets).map(s=>`<option ${s===App.cur.sheet?'selected':''}>${fmt.esc(s)}</option>`).join(''):'';
+}
+$('selFile').onchange=e=>{App.cur.file=+e.target.value;App.cur.sheet=Object.keys(App.files[App.cur.file].sheets)[0];App.scanned=false;App.issues=[];refreshAll();};
+$('selSheet').onchange=e=>{App.cur.sheet=e.target.value;App.scanned=false;App.issues=[];refreshAll();};
+
+function renderPreview(){
+  const d=curData(); if(!d){$('previewTable').innerHTML='';$('profileChips').innerHTML='';return;}
+  profileColumns(d);
+  $('profileChips').innerHTML=App.profile.map(c=>{
+    const tag=c.role!=='text'&&c.role!=='number'?c.role:(c.type);
+    return `<span class="pill pill-info" title="${c.filled}/${c.total} filled · ${c.unique} unique">${fmt.esc(c.header)}: ${tag}</span>`;
+  }).join(' ');
+  const issueMap={}; App.issues.forEach(it=>{if(it.fileName===d.fileName&&it.sheetName===App.cur.sheet&&it.row!=null&&it.col!=null)issueMap[it.row+'_'+it.col]=it;});
+  const rows=d.sheet.rows.slice(0,200);
+  let html='<thead><tr><th>#</th>'+d.sheet.headers.map(h=>`<th>${fmt.esc(h)}</th>`).join('')+'</tr></thead><tbody>';
+  rows.forEach((r,ri)=>{
+    html+=`<tr><td class="mono muted">${ri+2}</td>`+r.map((c,ci)=>{
+      const it=issueMap[ri+'_'+ci];
+      const cls=it?(it.resolved?'cell-fixed editable':'cell-err'):'editable';
+      return `<td class="${cls}" data-r="${ri}" data-c="${ci}" ${it&&!it.resolved?`title="${fmt.esc(it.msg)}"`:''}>${fmt.esc(c)}</td>`;
+    }).join('')+'</tr>';
+  });
+  $('previewTable').innerHTML=html+'</tbody>';
+}
+$('previewTable').addEventListener('click',e=>{
+  const td=e.target.closest('td[data-r]'); if(!td)return;
+  openEdit(+td.dataset.r,+td.dataset.c,null);
+});
+
+/* ---------- editing & change log ---------- */
+let editCtx=null;
+function openEdit(r,c,issue){
+  const d=curData(); if(!d)return;
+  editCtx={r,c,issue};
+  $('editWhere').textContent=`${d.fileName} · ${App.cur.sheet} · row ${r+2} · ${d.sheet.headers[c]}`;
+  $('editOld').textContent=d.sheet.rows[r][c]===''?'(blank)':d.sheet.rows[r][c];
+  $('editNew').value=issue&&issue.suggest!=null?issue.suggest:d.sheet.rows[r][c];
+  $('modalEdit').classList.add('open'); $('editNew').focus();
+}
+$('btnEditSave').onclick=()=>{
+  const d=curData(); const{r,c,issue}=editCtx;
+  const oldV=d.sheet.rows[r][c], newV=$('editNew').value;
+  if(newV!==oldV){
+    d.sheet.rows[r][c]=newV;
+    logChange({file:d.fileName,sheet:App.cur.sheet,row:r+2,header:d.sheet.headers[c],old:oldV,new:newV,
+      method:issue?'Issue correction':'Manual edit',issueType:issue?issue.kind:'—'});
+  }
+  if(issue){issue.resolved=true;issue.resolution=newV!==oldV?'Corrected':'Reviewed, kept as-is';}
+  $('modalEdit').classList.remove('open');
+  App.issues.filter(i=>!i.resolved&&i.fileName===d.fileName&&i.sheetName===App.cur.sheet&&i.row===r&&i.col===c&&i!==issue)
+    .forEach(i=>{i.resolved=true;i.resolution='Corrected';});
+  renderPreview();renderIssues();renderLedger();unlockPhase2();
+};
+function logChange(e){
+  App.changeLog.push({ts:new Date().toISOString(),n:App.changeLog.length+1,...e});
+  renderLedger();
+}
+function renderLedger(){
+  $('ledgerCount').textContent=`${App.changeLog.length} entr${App.changeLog.length===1?'y':'ies'}`;
+  if(!App.changeLog.length){$('ledgerRows').innerHTML='<div class="ledger-empty">No changes recorded yet.</div>';return;}
+  $('ledgerRows').innerHTML=App.changeLog.slice().reverse().map(e=>
+    `<div class="ledger-row"><span class="n">${String(e.n).padStart(3,'0')}</span>
+     <span class="n">${e.ts.slice(0,19).replace('T',' ')}</span>
+     <span class="what">${fmt.esc(e.method)} · ${fmt.esc(e.file)} / ${fmt.esc(e.sheet)} · row ${e.row} · <em>${fmt.esc(e.header)}</em>:
+       <s>${fmt.esc(e.old===''?'(blank)':e.old)}</s> → <b>${fmt.esc(e.new===''?'(blank)':e.new)}</b>
+       ${e.issueType&&e.issueType!=='—'?` <span class="muted">[${fmt.esc(e.issueType)}]</span>`:''}</span></div>`).join('');
+}
+$('btnDlLedgerCsv').onclick=()=>{
+  const rows=[['#','Timestamp','Method','File','Sheet','Row','Column','Old value','New value','Issue type'],
+    ...App.changeLog.map(e=>[e.n,e.ts,e.method,e.file,e.sheet,e.row,e.header,e.old,e.new,e.issueType])];
+  downloadCSV(rows,'COPP-change-log.csv');
+};
+
+/* ---------- error scan ---------- */
+const CHECKS=[
+  {kind:'Blank value',sev:'warning',safe:false},
+  {kind:'Duplicate row',sev:'warning',safe:false},
+  {kind:'Amended-report duplicate',sev:'warning',safe:false},
+  {kind:'Invalid date',sev:'error',safe:false},
+  {kind:'Future date',sev:'error',safe:false},
+  {kind:'Non-numeric amount',sev:'error',safe:false},
+  {kind:'Negative amount',sev:'warning',safe:false},
+  {kind:'Stray whitespace',sev:'warning',safe:true},
+  {kind:'Inconsistent capitalization',sev:'warning',safe:true},
+  {kind:'Malformed ZIP',sev:'warning',safe:false}
+];
+$('btnScan').onclick=runScan;
+function runScan(){
+  const d=curData(); if(!d){alert('Upload a file first.');return;}
+  profileColumns(d);
+  const issues=[]; const H=d.sheet.headers, R=d.sheet.rows;
+  const add=(kind,sev,row,col,msg,suggest)=>issues.push({id:issues.length,kind,sev,row,col,msg,suggest,
+    fileName:d.fileName,sheetName:App.cur.sheet,resolved:false});
+  const keyCols=App.profile.filter(c=>['amount','date','contributor','payee','committee'].includes(c.role));
+  // duplicates — amendment-aware: identical rows that differ only by Report ID are
+  // usually the same transaction restated in an amended filing, not a true duplicate
+  const ridCol=(App.profile.find(c=>c.role==='reportid')||{}).idx;
+  const seen={},seenAmend={};
+  R.forEach((r,ri)=>{const k=r.join('\u0001').toLowerCase();
+    const isExactDup=seen[k]!=null;
+    if(isExactDup)add('Duplicate row','warning',ri,null,`Row ${ri+2} is identical to row ${seen[k]+2} (including Report ID).`,null);
+    else seen[k]=ri;
+    if(ridCol!=null){
+      const ka=r.map((c,ci)=>ci===ridCol?'':String(c)).join('\u0001').toLowerCase();
+      if(seenAmend[ka]!=null&&!isExactDup&&String(R[seenAmend[ka]][ridCol])!==String(r[ridCol]))
+        add('Amended-report duplicate','warning',ri,null,
+          `Row ${ri+2} matches row ${seenAmend[ka]+2} except Report ID (${R[seenAmend[ka]][ridCol]} vs ${r[ridCol]}). Likely the same transaction restated in an amended filing — count once in totals; accept as-is here and verify against report status.`,null);
+      if(seenAmend[ka]==null)seenAmend[ka]=ri;
+    }});
+  // capitalization variants on text role columns
+  const capCols=App.profile.filter(c=>['city','contributor','payee','type','occupation','employer','committee','state'].includes(c.role));
+  capCols.forEach(c=>{
+    const canon={};
+    R.forEach(r=>{const v=String(r[c.idx]).trim();if(!v)return;const k=v.toLowerCase();(canon[k]=canon[k]||{}); canon[k][v]=(canon[k][v]||0)+1;});
+    Object.entries(canon).forEach(([k,variants])=>{
+      const names=Object.keys(variants); if(names.length<2)return;
+      const best=names.sort((a,b)=>variants[b]-variants[a])[0];
+      R.forEach((r,ri)=>{const v=String(r[c.idx]).trim();
+        if(v&&v.toLowerCase()===k&&v!==best)add('Inconsistent capitalization','warning',ri,c.idx,`"${v}" appears elsewhere as "${best}".`,best);});
+    });
+  });
+  R.forEach((r,ri)=>{
+    H.forEach((h,ci)=>{
+      const col=App.profile[ci], raw=r[ci], v=String(raw);
+      if(v!==v.trim()||/\s{2,}/.test(v.trim()))
+        if(v.trim()!=='')add('Stray whitespace','warning',ri,ci,'Leading/trailing or doubled spaces.',v.trim().replace(/\s{2,}/g,' '));
+      if(v.trim()===''){ if(keyCols.some(k=>k.idx===ci)) add('Blank value','warning',ri,ci,`Required field "${h}" is blank.`,null); return; }
+      if(col.role==='amount'||col.type==='number'&&col.role==='amount'){ }
+      if(col.role==='amount'){
+        const n=toNum(v);
+        if(n===null)add('Non-numeric amount','error',ri,ci,`"${v}" is not a valid amount.`,null);
+        else if(n<0)add('Negative amount','warning',ri,ci,`Amount is negative (${fmt.usd(n)}). Verify this is a refund/offset.`,null);
+      }
+      if(col.role==='date'||col.type==='date'){
+        const dt=parseDate(v);
+        if(!dt)add('Invalid date','error',ri,ci,`"${v}" could not be read as a date.`,null);
+        else if(dt>new Date())add('Future date','error',ri,ci,`Date ${dt.toLocaleDateString()} is in the future.`,null);
+      }
+      if(col.role==='zip'&&!/^\d{5}(-\d{4})?$/.test(v.trim()))
+        add('Malformed ZIP','warning',ri,ci,`"${v}" is not a valid 5-digit or ZIP+4 code.`,v.trim().replace(/\D/g,'').slice(0,5)||null);
+    });
+  });
+  App.issues=issues; App.scanned=true;
+  $('btnAutofixAll').classList.toggle('hidden',!issues.some(i=>i.suggest!=null&&!i.resolved));
+  $('issueFilters').classList.toggle('hidden',!issues.length);
+  renderIssues();renderPreview();unlockPhase2();
+}
+$('selIssueFilter').onchange=renderIssues;
+function renderIssues(){
+  const open=App.issues.filter(i=>!i.resolved).length;
+  $('issueSummary').innerHTML=App.scanned?
+    (open?`<span class="pill pill-err">${open} open</span> <span class="pill pill-ok">${App.issues.length-open} resolved</span>`
+         :(App.issues.length?`<span class="pill pill-ok">All ${App.issues.length} issues resolved</span>`:`<span class="pill pill-ok">No issues found</span>`)):'';
+  if(!App.scanned){$('issueList').innerHTML='<p class="muted">Run the error scan after uploading files. You can proceed to Phase 2 once issues are corrected or accepted.</p>';return;}
+  const f=$('selIssueFilter').value;
+  const list=App.issues.filter(i=>f==='all'||(f==='open'?!i.resolved:i.resolved));
+  if(!list.length){$('issueList').innerHTML=`<div class="banner banner-ok">&#10003; ${f==='open'?'No open issues. The dossier is ready for Phase 2.':'Nothing to show for this filter.'}</div>`;return;}
+  $('issueList').innerHTML=list.slice(0,400).map(it=>`
+    <div class="issue sev-${it.sev} ${it.resolved?'resolved':''}">
+      <span class="pill ${it.sev==='error'?'pill-err':'pill-warn'}">${it.kind}</span>
+      <div class="grow">
+        <div>${fmt.esc(it.msg)} ${it.suggest!=null?`Suggested: <span class="val mono">${fmt.esc(it.suggest)}</span>`:''}</div>
+        <div class="where">${fmt.esc(it.fileName)} · ${fmt.esc(it.sheetName)}${it.row!=null?` · row ${it.row+2}`:''}${it.col!=null?` · ${fmt.esc(curData().sheet.headers[it.col])}`:''}${it.resolved?` · <strong>${it.resolution}</strong>`:''}</div>
+      </div>
+      ${it.resolved?'':`<div class="acts">
+        ${it.col!=null?`<button class="btn btn-outline btn-sm" onclick="fixIssue(${it.id})">Correct…</button>`:''}
+        ${it.suggest!=null?`<button class="btn btn-gold btn-sm" onclick="autoFix(${it.id})">Auto-fix</button>`:''}
+        <button class="btn btn-outline btn-sm" onclick="acceptIssue(${it.id})">Accept as-is</button></div>`}
+    </div>`).join('')+(list.length>400?`<p class="muted">Showing first 400 of ${list.length} issues.</p>`:'');
+}
+function fixIssue(id){const it=App.issues[id];openEdit(it.row,it.col,it);}
+function autoFix(id){
+  const it=App.issues[id], d=curData();
+  const oldV=d.sheet.rows[it.row][it.col];
+  d.sheet.rows[it.row][it.col]=it.suggest;
+  it.resolved=true; it.resolution='Auto-fixed';
+  logChange({file:it.fileName,sheet:it.sheetName,row:it.row+2,header:d.sheet.headers[it.col],old:oldV,new:it.suggest,method:'Auto-fix',issueType:it.kind});
+  renderIssues();renderPreview();unlockPhase2();
+}
+function acceptIssue(id){
+  const it=App.issues[id], d=curData();
+  it.resolved=true; it.resolution='Accepted as-is';
+  logChange({file:it.fileName,sheet:it.sheetName,row:it.row!=null?it.row+2:'—',header:it.col!=null?d.sheet.headers[it.col]:'—',
+    old:it.col!=null?d.sheet.rows[it.row][it.col]:'—',new:it.col!=null?d.sheet.rows[it.row][it.col]:'—',
+    method:'Accepted as-is (no change)',issueType:it.kind});
+  renderIssues();renderPreview();unlockPhase2();
+}
+$('btnAutofixAll').onclick=()=>{
+  App.issues.filter(i=>!i.resolved&&i.suggest!=null&&['Stray whitespace','Inconsistent capitalization'].includes(i.kind))
+    .forEach(i=>autoFix(i.id));
+};
+$('btnClearAll').onclick=()=>{
+  if(!confirm('Clear all uploaded files, issues, results, and the change log?'))return;
+  Object.assign(App,{files:[],issues:[],changeLog:[],results:[],scanned:false,cur:{file:0,sheet:''}});
+  Object.values(App.charts).forEach(c=>c.destroy());App.charts={};
+  $('resultsArea').innerHTML='';$('resultsPanel').classList.add('hidden');$('stepBtn2').disabled=true;$('stepBtn1').classList.remove('done');
+  gotoPhase(1);refreshAll();
+};
+
+/* ---------- session save / load ---------- */
+$('btnSaveSession').onclick=()=>{
+  const blob=new Blob([JSON.stringify({v:1,files:App.files,changeLog:App.changeLog,issues:App.issues,scanned:App.scanned,cur:App.cur,results:App.results},null,1)],{type:'application/json'});
+  triggerDl(blob,`COPP-session-${new Date().toISOString().slice(0,10)}.json`);
+};
+$('btnLoadSession').onclick=()=>$('sessionInput').click();
+$('sessionInput').onchange=async e=>{
+  try{
+    const s=JSON.parse(await e.target.files[0].text());
+    Object.assign(App,{files:s.files||[],changeLog:s.changeLog||[],issues:s.issues||[],scanned:!!s.scanned,cur:s.cur||{file:0,sheet:''},results:s.results||[]});
+    refreshAll();
+    if(App.results.length){gotoPhase(2);$('resultsPanel').classList.remove('hidden');App.results.forEach(renderResult);}
+    $('footStatus').textContent='Session restored.';
+  }catch(err){alert('Could not read session file: '+err.message);}
+  e.target.value='';
+};
+
+/* ---------- sample data ---------- */
+$('btnSample').onclick=()=>{
+  const headers=['Date Received','Contributor Name','Contributor Type','Amount','City','State','Zip','Occupation','Employer'];
+  const names=['Sarah Whitford','BIG SKY PAC','Sarah Whitford ','Daniel Reyes','Treasure State Assoc.','Maria Chen','daniel reyes','Glacier Holdings LLC','Tom Olson','Helena Citizens Cmte','Ruth Bearcrane','Pat Murphy'];
+  const cities=['Helena','HELENA','Billings','Missoula','Bozeman','Great Falls','Butte','helena'];
+  const types=['Individual','Political Committee','Individual','Business','Individual'];
+  const rows=[];const rnd=(a)=>a[Math.floor(Math.random()*a.length)];
+  for(let i=0;i<160;i++){
+    const m=1+Math.floor(Math.random()*10), d=1+Math.floor(Math.random()*28);
+    rows.push([`2026-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`,rnd(names),rnd(types),
+      (Math.random()<0.05?-1:1)*(Math.round(Math.random()*120)*10+20)+'',rnd(cities),'MT',
+      Math.random()<0.06?'5960':'596'+(10+Math.floor(Math.random()*49)),'Rancher','Self']);
+  }
+  rows.push(['2027-02-30','Test Donor','Individual','abc','Helena','MT','59601','','']);
+  rows.push(rows[3].slice());
+  rows.push(['','','Individual','','Helena','MT','59601','','']);
+  App.files.push({name:'SAMPLE-CERS-C5-Contributions.csv',sheets:{Sheet1:{headers,rows}}});
+  App.cur={file:App.files.length-1,sheet:'Sheet1'};App.scanned=false;App.issues=[];refreshAll();
+};
+</script>
+<script>
+/* ================= Phase 2: analysis & reporting ================= */
+function groupSum(rows,keyIdx,valIdx){
+  const g={};rows.forEach(r=>{const k=String(r[keyIdx]).trim()||'(blank)';const n=toNum(r[valIdx]);
+    g[k]=g[k]||{sum:0,count:0};g[k].count++;if(n!=null)g[k].sum+=n;});
+  return Object.entries(g).map(([k,v])=>({key:k,...v})).sort((a,b)=>b.sum-a.sum);
+}
+function monthKey(v){const d=parseDate(v);return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:null;}
+
+const LIBRARY=[
+ {id:'summary',title:'Dossier summary statistics',desc:'Row counts, totals, averages, min/max, and completeness for every column.',needs:[],chart:'bar'},
+ {id:'topContrib',title:'Top 25 contributors',desc:'Largest contributors ranked by total amount given.',needs:['contributor','amount'],chart:'bar'},
+ {id:'byType',title:'Totals by contributor/transaction type',desc:'Amounts grouped by type or category (individual, PAC, business, etc.).',needs:['type','amount'],chart:'doughnut'},
+ {id:'trend',title:'Monthly trend',desc:'Total amount by month across the reporting period.',needs:['date','amount'],chart:'line'},
+ {id:'geo',title:'Geographic breakdown',desc:'Totals by city, with in-state vs out-of-state split where a state column exists.',needs:['city','amount'],chart:'bar'},
+ {id:'payees',title:'Top payees / vendors',desc:'Largest expenditure recipients ranked by total paid.',needs:['payee','amount'],chart:'bar'},
+ {id:'threshold',title:'Contributions over threshold',desc:'Every transaction above the limit you set, with contributor totals — a starting point for limit-compliance review.',needs:['amount'],chart:'bar'},
+ {id:'dupDonors',title:'Possible duplicate contributors',desc:'Names that normalize to the same contributor (case, spacing) — useful before aggregation.',needs:['contributor'],chart:null},
+ {id:'completeness',title:'Data completeness report',desc:'Blank-rate per column, flagging fields below disclosure-quality thresholds.',needs:[],chart:'bar'},
+ {id:'anomaly',title:'Anomaly screen',desc:'Repeated identical name+amount+date entries and round-number concentration.',needs:['amount'],chart:'bar'},
+ {id:'partyYear',title:'Spend by party, by year',desc:'Expenditure pivot: each party\u2019s totals per year with grand totals \u2014 the headline table for a committee dossier.',needs:[],needsHdr:['Party','Flow','Amount'],chart:'bar'},
+ {id:'concentration',title:'Recipient concentration (top 10)',desc:'Top expenditure recipients with percent of total and cumulative percent \u2014 shows how concentrated the spending is.',needs:[],needsHdr:['Flow','Counterparty','Amount'],chart:'bar'},
+ {id:'quarterly',title:'Expenditures by quarter',desc:'Quarterly expenditure totals across all years in the dossier.',needs:[],needsHdr:['Flow','Quarter','Amount'],chart:'bar'},
+ {id:'candVsCmte',title:'Candidate vs committee/measure spending',desc:'Yearly split between money spent on candidates and money routed to committees and ballot measures.',needs:[],needsHdr:['Recipient Type','Amount'],chart:'bar'},
+ {id:'supportOppose',title:'Support vs oppose, by target',desc:'Parses the Supporting / opposing column to total independent spending for and against each named candidate.',needs:[],needsHdr:['Supporting / opposing','Amount'],chart:'bar'},
+ {id:'flags',title:'Compliance flag screen',desc:'Counts and totals for Electioneering = Y, Corporate funds = Y, and Refund = Y transactions.',needs:[],needsHdr:['Refund','Amount'],chart:'bar'},
+ {id:'amendDupes',title:'Amended-report duplicates',desc:'Transactions that appear twice under different Report IDs \u2014 usually an amended filing restating the line, which double-counts totals if untreated.',needs:[],needsHdr:['Report ID'],chart:null},
+ {id:'filings',title:'Filing hygiene (Source Reports)',desc:'Amendment rate, pre-election notices, missing original documents, and filings received well after period end.',needs:[],needsSheet:'source reports',chart:'bar'},
+ {id:'contacts',title:'Contact normalization',desc:'Clusters address and contact variants (PO Box 87 six different ways) to a canonical form before any entity-level matching.',needs:[],needsSheet:'contact',chart:null},
+ {id:'crossShared',title:'Cross-entity: shared counterparties',desc:'Counterparties that appear in more than one uploaded dossier, with per-entity totals.',needs:[],needsHdr:['Entity','Counterparty'],multi:true,chart:'bar'},
+ {id:'crossPurpose',title:'Cross-entity: opposing activity',desc:'Candidates that one entity spent supporting while another spent opposing \u2014 the head-to-head view across dossiers.',needs:[],needsHdr:['Supporting / opposing'],multi:true,chart:'bar'},
+ {id:'transfers',title:'Cross-entity: possible transfers',desc:'Contributions given by one entity that match (date + amount) contributions received by another \u2014 candidate inter-entity money flows.',needs:[],needsHdr:['Flow'],multi:true,chart:null}
+];
+function hasHdr(d,h){return d&&d.sheet.headers.some(x=>x.toLowerCase()===h.toLowerCase());}
+function findSheetLike(rx){
+  const out=[];App.files.forEach(f=>Object.entries(f.sheets).forEach(([sn,s])=>{if(rx.test(sn))out.push({file:f,sheetName:sn,sheet:s});}));
+  return out;
+}
+function reportAvailable(rep,d){
+  d=d||analysisData(); if(!d)return false;
+  if(!rep.needs.every(n=>colByRole(n)||(n==='amount'&&firstNumCol())||(n==='date'&&firstDateCol())))return false;
+  if(rep.needsHdr&&!rep.needsHdr.every(h=>hasHdr(d,h)))return false;
+  if(rep.needsSheet&&!findSheetLike(new RegExp(rep.needsSheet,'i')).length)return false;
+  if(rep.multi&&entityCountIn(d.sheet)<2)return false;
+  return true;
+}
+
+/* ---- analysis scope (current sheet / file consolidated / all files combined) ---- */
+function entityCountIn(t){const ei=t.headers.indexOf('Entity');return ei<0?1:new Set(t.rows.map(r=>r[ei]).filter(Boolean)).size;}
+function analysisData(){
+  const scope=$('selScope')?$('selScope').value:'sheet';
+  if(scope==='combined'){
+    const t=combineFiles(App.files);
+    if(t.rows.length)return{sheet:t,fileName:`All files combined (${entityCountIn(t)} entities)`,sheetName:'All Transactions'};
+  }
+  if(scope==='file'){
+    const f=App.files[App.cur.file];
+    if(f&&f.sheets['All Transactions'])return{file:f,sheet:f.sheets['All Transactions'],fileName:f.name,sheetName:'All Transactions'};
+  }
+  return curData();
+}
+function refreshScope(){
+  const sel=$('selScope'); if(!sel)return;
+  const cur=sel.value;
+  const f=App.files[App.cur.file];
+  const opts=[`<option value="sheet">Current sheet (${f?fmt.esc(App.cur.sheet):'—'})</option>`];
+  if(f&&f.sheets['All Transactions'])opts.push(`<option value="file">${fmt.esc(f.name)} — All Transactions</option>`);
+  const nTx=App.files.filter(x=>x.sheets['All Transactions']).length;
+  if(nTx>1)opts.push(`<option value="combined">All files combined (${nTx} dossiers)</option>`);
+  sel.innerHTML=opts.join('');
+  if([...sel.options].some(o=>o.value===cur))sel.value=cur;
+  else if(nTx>1)sel.value='combined';
+  else if(f&&f.sheets['All Transactions'])sel.value='file';
+}
+$('selScope').onchange=()=>buildReportGrid();
+
+function buildReportGrid(){
+  refreshScope();
+  const d=analysisData(); if(d)profileColumns(d);
+  $('repGrid').innerHTML=LIBRARY.map(rep=>{
+    const ok=reportAvailable(rep,d);
+    return `<label class="rep-card ${ok?'':'unavailable'}">
+      <input type="checkbox" value="${rep.id}" ${ok?'':'disabled'}>
+      <div><div class="t">${rep.title}</div><div class="d">${rep.desc}</div>
+      ${ok?'':`<div class="why">Unavailable — ${rep.multi&&entityCountIn(d?d.sheet:{headers:[],rows:[]})<2?'needs two or more dossiers (switch the scope above to All files combined)':rep.needsSheet?`needs a ${rep.needsSheet} sheet in an uploaded dossier`:`needs ${(rep.needsHdr||rep.needs).join(' + ')} column${(rep.needsHdr||rep.needs).length>1?'s':''}`}</div>`}
+      <div class="why" data-why="${rep.id}"></div></div></label>`;
+  }).join('');
+}
+$('btnSelectAll').onclick=()=>document.querySelectorAll('#repGrid input:not(:disabled)').forEach(c=>c.checked=true);
+$('tabLib').onclick=()=>{$('tabLib').classList.add('active');$('tabFree').classList.remove('active');$('paneLib').classList.remove('hidden');$('paneFree').classList.add('hidden');};
+$('tabFree').onclick=()=>{$('tabFree').classList.add('active');$('tabLib').classList.remove('active');$('paneFree').classList.remove('hidden');$('paneLib').classList.add('hidden');};
+
+/* ---- recommendation engine ---- */
+$('btnSuggest').onclick=()=>{
+  refreshScope();
+  const d=analysisData(); if(!d)return; profileColumns(d);
+  const recs=[];
+  const amount=firstNumCol(),date=firstDateCol();
+  if(colByRole('contributor')&&amount)recs.push(['topContrib','Contributor and amount columns detected — ranking givers is the core C-5 review.']);
+  if(colByRole('type')&&amount)recs.push(['byType','A type/category column was found; type splits surface PAC vs individual funding.']);
+  if(date&&amount)recs.push(['trend','Dates span multiple months — a trend line shows filing-period activity.']);
+  if(colByRole('city'))recs.push(['geo','City data present — geographic source of funds is a frequent records request.']);
+  if(colByRole('payee')&&amount)recs.push(['payees','Payee column found — expenditure concentration review applies.']);
+  if(amount)recs.push(['threshold','Amount column found — screen against the contribution limit you set.']);
+  if(colByRole('contributor'))recs.push(['dupDonors','Name variants were detected during the scan; de-duplication is recommended before totals.']);
+  if(hasHdr(d,'Flow')&&hasHdr(d,'Party'))recs.push(['partyYear','Consolidated dossier data detected — the party-by-year pivot is the headline table.']);
+  if(hasHdr(d,'Flow')&&hasHdr(d,'Counterparty'))recs.push(['concentration','Recipient concentration with cumulative share is the standard committee-spending exhibit.']);
+  if(hasHdr(d,'Quarter'))recs.push(['quarterly','Quarterly view shows election-cycle ramp and off-cycle spending.']);
+  if(hasHdr(d,'Recipient Type'))recs.push(['candVsCmte','Candidate vs committee/measure split shows how the entity routes its money.']);
+  if(hasHdr(d,'Supporting / opposing')&&d.sheet.rows.some(r=>String(r[d.sheet.headers.indexOf('Supporting / opposing')]).trim()))recs.push(['supportOppose','Supporting / opposing detail present — independent-expenditure targets can be totaled.']);
+  if(hasHdr(d,'Report ID'))recs.push(['amendDupes','Report IDs present — amended filings can restate lines and silently double-count totals.']);
+  if(findSheetLike(/source reports/i).length)recs.push(['filings','A Source Reports sheet was found — filing hygiene (amendment rate, late receipt) is reviewable.']);
+  if(findSheetLike(/^contact$/i).length)recs.push(['contacts','A Contact sheet was found — address variants should be normalized before matching.']);
+  if(entityCountIn(d.sheet)>1){
+    recs.push(['crossShared','Multiple entities in scope — shared counterparties are the first coordination screen.']);
+    if(hasHdr(d,'Supporting / opposing'))recs.push(['crossPurpose','Multiple entities with support/oppose detail — head-to-head electoral activity can be mapped.']);
+    recs.push(['transfers','Multiple entities in scope — given-vs-received matching can surface inter-entity money flows.']);
+  }
+  recs.push(['completeness','Always recommended: confirms disclosure fields are adequately populated.']);
+  document.querySelectorAll('#repGrid input').forEach(c=>c.checked=false);
+  recs.forEach(([id,why])=>{
+    const cb=document.querySelector(`#repGrid input[value="${id}"]`); if(cb&&!cb.disabled)cb.checked=true;
+    const w=document.querySelector(`[data-why="${id}"]`); if(w)w.textContent='★ Recommended — '+why;
+  });
+  $('suggestBanner').innerHTML=`<div class="banner banner-info">&#9733; ${recs.length} reports recommended based on the columns in your data. Adjust the selection, then run.</div>`;
+};
+
+/* ---- run reports ---- */
+$('btnRunReports').onclick=()=>{
+  const ids=[...document.querySelectorAll('#repGrid input:checked')].map(c=>c.value);
+  if(!ids.length){alert('Select at least one report (or use "Analyze my data").');return;}
+  const d=analysisData(); profileColumns(d);
+  ids.forEach(id=>{const res=RUNNERS[id]&&RUNNERS[id](d);if(res)addResult(res);});
+  renderMoreSuggestions(ids);
+};
+
+const RUNNERS={
+ summary(d){
+  const rows=App.profile.map(c=>{
+    if(c.type==='number'){const ns=d.sheet.rows.map(r=>toNum(r[c.idx])).filter(n=>n!=null);
+      const sum=ns.reduce((a,b)=>a+b,0);
+      return [c.header,'number',c.filled,fmt.usd(sum),ns.length?fmt.usd(sum/ns.length):'—',ns.length?fmt.usd(Math.min(...ns)):'—',ns.length?fmt.usd(Math.max(...ns)):'—'];}
+    return [c.header,c.type+(c.role!=='text'?` (${c.role})`:''),c.filled,'—','—','—',c.unique+' unique'];
+  });
+  const amt=firstNumCol();let kpis=[{l:'Rows',v:d.sheet.rows.length.toLocaleString()},{l:'Columns',v:App.profile.length}];
+  if(amt){const ns=d.sheet.rows.map(r=>toNum(r[amt.idx])).filter(n=>n!=null);
+    kpis.push({l:'Total '+amt.header,v:fmt.usd(ns.reduce((a,b)=>a+b,0))},{l:'Average',v:fmt.usd(ns.reduce((a,b)=>a+b,0)/(ns.length||1))});}
+  return {id:'summary',title:'Dossier summary statistics',
+    narrative:`The dossier "${d.fileName}" (${d.sheetName}) contains ${d.sheet.rows.length.toLocaleString()} records across ${App.profile.length} columns. ${amt?`Total ${amt.header.toLowerCase()} is ${kpis[2].v}, averaging ${kpis[3].v} per record.`:''} Column completeness and value ranges are listed below; ${App.changeLog.length} correction(s) from Phase 1 are reflected in these figures.`,
+    kpis,columns:['Column','Type','Filled','Total','Average','Min','Max'],rows,
+    chart:amt?{type:'bar',label:'Filled cells per column',labels:App.profile.map(c=>c.header),data:App.profile.map(c=>c.filled)}:null};
+ },
+ topContrib(d){
+  const k=colByRole('contributor'),a=firstNumCol();
+  const g=groupSum(d.sheet.rows,k.idx,a.idx).slice(0,25);
+  const total=g.reduce((s,x)=>s+x.sum,0);
+  return {id:'topContrib',title:'Top 25 contributors',
+    narrative:`The top ${g.length} contributors account for ${fmt.usd(total)}. The single largest, ${g[0]?.key||'—'}, gave ${fmt.usd(g[0]?.sum||0)} across ${g[0]?.count||0} transaction(s)${g.length>4?`; the top five together account for ${fmt.usd(g.slice(0,5).reduce((s,x)=>s+x.sum,0))}`:''}. Review high-count repeat givers against per-election limits.`,
+    kpis:[{l:'Top contributor',v:fmt.usd(g[0]?.sum||0)},{l:'Top-25 total',v:fmt.usd(total)},{l:'Unique contributors',v:new Set(d.sheet.rows.map(r=>String(r[k.idx]).trim().toLowerCase())).size}],
+    columns:[k.header,'Transactions','Total amount'],rows:g.map(x=>[x.key,x.count,fmt.usd(x.sum)]),
+    chart:{type:'bar',label:'Total by contributor',labels:g.slice(0,12).map(x=>x.key),data:g.slice(0,12).map(x=>x.sum)}};
+ },
+ byType(d){
+  const k=colByRole('type'),a=firstNumCol();
+  const g=groupSum(d.sheet.rows,k.idx,a.idx);
+  const total=g.reduce((s,x)=>s+x.sum,0)||1;
+  return {id:'byType',title:`Totals by ${k.header.toLowerCase()}`,
+    narrative:`${g.length} categories were found. "${g[0]?.key}" leads with ${fmt.usd(g[0]?.sum||0)} (${(100*g[0]?.sum/total).toFixed(1)}% of the total). Category concentration above roughly two-thirds in a single source type usually merits a closer funding-source review.`,
+    kpis:g.slice(0,4).map(x=>({l:x.key,v:fmt.usd(x.sum)})),
+    columns:[k.header,'Transactions','Total','Share'],rows:g.map(x=>[x.key,x.count,fmt.usd(x.sum),(100*x.sum/total).toFixed(1)+'%']),
+    chart:{type:'doughnut',label:k.header,labels:g.map(x=>x.key),data:g.map(x=>x.sum)}};
+ },
+ trend(d){
+  const dt=firstDateCol(),a=firstNumCol();
+  const g={};d.sheet.rows.forEach(r=>{const m=monthKey(r[dt.idx]);if(!m)return;const n=toNum(r[a.idx]);g[m]=g[m]||{sum:0,count:0};g[m].count++;if(n!=null)g[m].sum+=n;});
+  const keys=Object.keys(g).sort();
+  const peak=keys.reduce((p,k)=>g[k].sum>(g[p]?.sum||-1)?k:p,keys[0]);
+  return {id:'trend',title:'Monthly trend',
+    narrative:`Activity spans ${keys.length} month(s), from ${keys[0]||'—'} to ${keys[keys.length-1]||'—'}. Peak month was ${peak} at ${fmt.usd(g[peak]?.sum||0)} (${g[peak]?.count||0} transactions). Spikes near filing deadlines are normal; spikes immediately after a reporting-period close can indicate timing issues worth a look.`,
+    kpis:[{l:'Months covered',v:keys.length},{l:'Peak month',v:peak||'—'},{l:'Peak amount',v:fmt.usd(g[peak]?.sum||0)}],
+    columns:['Month','Transactions','Total'],rows:keys.map(k=>[k,g[k].count,fmt.usd(g[k].sum)]),
+    chart:{type:'line',label:'Total by month',labels:keys,data:keys.map(k=>g[k].sum)}};
+ },
+ geo(d){
+  const c=colByRole('city'),a=firstNumCol(),st=colByRole('state');
+  const g=groupSum(d.sheet.rows,c.idx,a.idx).slice(0,20);
+  let inOut='';
+  if(st){let inS=0,outS=0;d.sheet.rows.forEach(r=>{const n=toNum(r[a.idx])||0;(String(r[st.idx]).trim().toUpperCase()==='MT'?inS+=n:outS+=n);});
+    inOut=` In-state (MT) funds total ${fmt.usd(inS)}; out-of-state funds total ${fmt.usd(outS)} (${(100*outS/((inS+outS)||1)).toFixed(1)}% of all funds).`;}
+  return {id:'geo',title:'Geographic breakdown',
+    narrative:`Funds originate from ${g.length}+ cities; ${g[0]?.key||'—'} leads at ${fmt.usd(g[0]?.sum||0)}.${inOut}`,
+    kpis:[{l:'Top city',v:g[0]?.key||'—'},{l:'Top-city total',v:fmt.usd(g[0]?.sum||0)}],
+    columns:[c.header,'Transactions','Total'],rows:g.map(x=>[x.key,x.count,fmt.usd(x.sum)]),
+    chart:{type:'bar',label:'Total by city',labels:g.slice(0,12).map(x=>x.key),data:g.slice(0,12).map(x=>x.sum)}};
+ },
+ payees(d){
+  const k=colByRole('payee'),a=firstNumCol();
+  const g=groupSum(d.sheet.rows,k.idx,a.idx).slice(0,25);
+  return {id:'payees',title:'Top payees / vendors',
+    narrative:`The top payee, ${g[0]?.key||'—'}, received ${fmt.usd(g[0]?.sum||0)}. Concentrated spending with a single vendor is not itself a violation but is a standard line of review for coordinated-expenditure questions.`,
+    kpis:[{l:'Top payee total',v:fmt.usd(g[0]?.sum||0)},{l:'Payees listed',v:g.length}],
+    columns:[k.header,'Payments','Total paid'],rows:g.map(x=>[x.key,x.count,fmt.usd(x.sum)]),
+    chart:{type:'bar',label:'Total by payee',labels:g.slice(0,12).map(x=>x.key),data:g.slice(0,12).map(x=>x.sum)}};
+ },
+ threshold(d){
+  const a=firstNumCol(),k=colByRole('contributor'),lim=+$('inpThreshold').value||0;
+  const hits=d.sheet.rows.map((r,i)=>({r,i,n:toNum(r[a.idx])})).filter(x=>x.n!=null&&x.n>lim);
+  const cols=[ '#', ...(k?[k.header]:[]), a.header];
+  return {id:'threshold',title:`Transactions over ${fmt.usd(lim)}`,
+    narrative:`${hits.length} transaction(s) exceed the ${fmt.usd(lim)} threshold, totaling ${fmt.usd(hits.reduce((s,x)=>s+x.n,0))}. This screen flags single transactions only; verify aggregate per-contributor totals against the applicable per-election limit before drawing conclusions.`,
+    kpis:[{l:'Over threshold',v:hits.length},{l:'Sum over threshold',v:fmt.usd(hits.reduce((s,x)=>s+x.n,0))},{l:'Threshold',v:fmt.usd(lim)}],
+    columns:cols,rows:hits.slice(0,300).map(x=>[x.i+2,...(k?[x.r[k.idx]]:[]),fmt.usd(x.n)]),
+    chart:{type:'bar',label:'Amounts over threshold',labels:hits.slice(0,15).map(x=>k?String(x.r[k.idx]).slice(0,18):'Row '+(x.i+2)),data:hits.slice(0,15).map(x=>x.n)}};
+ },
+ dupDonors(d){
+  const k=colByRole('contributor');
+  const canon={};d.sheet.rows.forEach((r,i)=>{const v=String(r[k.idx]).trim();if(!v)return;const key=v.toLowerCase().replace(/\s+/g,' ');(canon[key]=canon[key]||new Set()).add(v);});
+  const dups=Object.entries(canon).filter(([,s])=>s.size>1);
+  return {id:'dupDonors',title:'Possible duplicate contributors',
+    narrative:dups.length?`${dups.length} contributor name(s) appear with multiple spellings or casings. Aggregated totals (and limit checks) will undercount unless these are merged. Use Phase 1 auto-fix or manual edits to standardize, then re-run contributor reports.`:'No name variants detected. Contributor aggregation can be trusted as-is.',
+    kpis:[{l:'Names with variants',v:dups.length}],
+    columns:['Normalized name','Variants found'],rows:dups.map(([k,s])=>[k,[...s].join('  |  ')]),chart:null};
+ },
+ completeness(d){
+  const rows=App.profile.map(c=>[c.header,c.filled,c.total,((100*c.filled/(c.total||1)).toFixed(1))+'%']);
+  const weak=App.profile.filter(c=>c.filled/(c.total||1)<0.9);
+  return {id:'completeness',title:'Data completeness report',
+    narrative:weak.length?`${weak.length} column(s) fall below 90% completeness: ${weak.map(c=>c.header).join(', ')}. For disclosure data, blank occupation/employer or address fields above de-minimis thresholds are a routine deficiency finding.`:'All columns are at least 90% complete. No completeness deficiencies flagged.',
+    kpis:[{l:'Columns below 90%',v:weak.length}],
+    columns:['Column','Filled','Total rows','Completeness'],rows,
+    chart:{type:'bar',label:'% complete',labels:App.profile.map(c=>c.header),data:App.profile.map(c=>+(100*c.filled/(c.total||1)).toFixed(1))}};
+ },
+ anomaly(d){
+  const a=firstNumCol(),k=colByRole('contributor'),dt=firstDateCol();
+  const seen={};const reps=[];
+  d.sheet.rows.forEach((r,i)=>{const key=[k?r[k.idx]:'',r[a.idx],dt?r[dt.idx]:''].join('|').toLowerCase();
+    if(seen[key]!=null)reps.push([i+2,k?r[k.idx]:'—',r[a.idx],dt?r[dt.idx]:'—',`duplicates row ${seen[key]+2}`]);else seen[key]=i;});
+  const ns=d.sheet.rows.map(r=>toNum(r[a.idx])).filter(n=>n!=null&&n>0);
+  const round=ns.filter(n=>n%100===0).length;
+  return {id:'anomaly',title:'Anomaly screen',
+    narrative:`${reps.length} repeated name+amount+date entr${reps.length===1?'y':'ies'} found (possible double-entry). ${round} of ${ns.length} amounts (${(100*round/(ns.length||1)).toFixed(0)}%) are exact $100 multiples — high round-number concentration is normal for contributions but worth noting for expenditures. These are screening signals, not findings.`,
+    kpis:[{l:'Repeated entries',v:reps.length},{l:'Round-$100 amounts',v:round}],
+    columns:['Row','Name','Amount','Date','Note'],rows:reps.slice(0,200),
+    chart:{type:'bar',label:'Round vs non-round amounts',labels:['$100 multiples','Other amounts'],data:[round,ns.length-round]}};
+ },
+ /* ---- dossier-specific reports (consolidated All Transactions data) ---- */
+ partyYear(d){
+  const p=pivotPartyYear(d.sheet);
+  const body=p.rows.slice(0,-1), tot=p.rows[p.rows.length-1];
+  const lead=body[0];
+  return {id:'partyYear',title:'Spend by party, by year',
+    narrative:`Expenditures total ${fmt.usd(tot[tot.length-1])} across ${p.cols.length-2} year(s). ${lead?`The largest share, ${fmt.usd(lead[lead.length-1])} (${(100*lead[lead.length-1]/(tot[tot.length-1]||1)).toFixed(1)}%), went to ${lead[0]==='None / Committee'?'committees and ballot measures (no party attached)':lead[0]+' recipients'}.`:''} Committee and measure spending carries no party label; the candidate-level partisan split is in the rows beneath it.`,
+    kpis:body.slice(0,4).map(r=>({l:r[0],v:fmt.usd(r[r.length-1])})),
+    columns:p.cols,rows:p.rows.map(r=>r.map((c,i)=>i&&typeof c==='number'?fmt.usd(c):c)),
+    chart:{type:'bar',label:'Total by party (all years)',labels:body.map(r=>r[0]),data:body.map(r=>r[r.length-1])}};
+ },
+ concentration(d){
+  const c=concentration2(d.sheet,10);
+  const body=c.rows.filter(r=>r[0]!=='Total');
+  return {id:'concentration',title:'Recipient concentration (top 10)',
+    narrative:`The top 10 recipients account for ${(100*c.topShare).toFixed(1)}% of ${fmt.usd(c.total)} in total expenditures. ${c.topShare>0.66?'Concentration above two-thirds in ten recipients is high; the cumulative column shows exactly where the spending curve flattens.':'The cumulative column shows where the spending curve flattens.'} This mirrors the concentration block in a v2 dossier Analysis sheet.`,
+    kpis:[{l:'Total expenditures',v:fmt.usd(c.total)},{l:'Top-10 share',v:(100*c.topShare).toFixed(1)+'%'},{l:'#1 recipient',v:body[0]?body[0][0]:'—'}],
+    columns:c.cols,rows:c.rows.map(r=>[r[0],fmt.usd(r[1]),r[2]===''?'':(100*r[2]).toFixed(1)+'%',r[3]===''?'':(100*r[3]).toFixed(1)+'%']),
+    chart:{type:'bar',label:'Top recipients',labels:body.slice(0,10).map(r=>r[0]),data:body.slice(0,10).map(r=>r[1])}};
+ },
+ quarterly(d){
+  const q=byQuarter(d.sheet);
+  const body=q.rows.slice(0,-1);
+  const peak=body.reduce((p,r)=>r[1]>(p?p[1]:-1)?r:p,null);
+  return {id:'quarterly',title:'Expenditures by quarter',
+    narrative:`Spending spans ${body.length} quarter(s). ${peak?`The peak quarter was ${peak[0]} at ${fmt.usd(peak[1])}.`:''} Sharp election-quarter ramps are expected; spending in quarters with no scheduled election is the row to read closely.`,
+    kpis:[{l:'Quarters active',v:body.filter(r=>r[1]>0).length},{l:'Peak quarter',v:peak?peak[0]:'—'},{l:'Peak amount',v:fmt.usd(peak?peak[1]:0)}],
+    columns:q.cols,rows:q.rows.map(r=>[r[0],fmt.usd(r[1])]),
+    chart:{type:'bar',label:'Expenditures by quarter',labels:body.map(r=>r[0]),data:body.map(r=>r[1])}};
+ },
+ candVsCmte(d){
+  const p=candVsCmte2(d.sheet);
+  const tot=p.rows[p.rows.length-1];
+  return {id:'candVsCmte',title:'Candidate vs committee/measure spending',
+    narrative:`Of ${fmt.usd(tot[3])} in total expenditures, ${fmt.usd(tot[2])} (${(100*tot[2]/(tot[3]||1)).toFixed(1)}%) went to candidates and ${fmt.usd(tot[1])} (${(100*tot[1]/(tot[3]||1)).toFixed(1)}%) to committees and ballot measures. The year rows show how that mix shifted across cycles.`,
+    kpis:[{l:'To candidates',v:fmt.usd(tot[2])},{l:'To committees/measures',v:fmt.usd(tot[1])}],
+    columns:p.cols,rows:p.rows.map(r=>[r[0],fmt.usd(r[1]),fmt.usd(r[2]),fmt.usd(r[3])]),
+    chart:{type:'bar',label:'Committee/measure vs candidate by year',labels:p.rows.slice(0,-1).map(r=>r[0]),data:p.rows.slice(0,-1).map(r=>r[3])}};
+ },
+ supportOppose(d){
+  const s=supportOppose2(d.sheet);
+  const top=s.rows.slice(0,25);
+  const oppTot=s.rows.reduce((a,r)=>a+r[2],0),supTot=s.rows.reduce((a,r)=>a+r[1],0);
+  return {id:'supportOppose',title:'Support vs oppose, by target',
+    narrative:`The Supporting / opposing column names ${s.rows.length} target(s): ${fmt.usd(supTot)} in supporting spend and ${fmt.usd(oppTot)} in opposing spend. ${top[0]?`The largest target is ${top[0][0]} at ${fmt.usd(top[0][3])} total.`:''} Opposition spending is the standard starting point for independent-expenditure review.`,
+    kpis:[{l:'Supporting $',v:fmt.usd(supTot)},{l:'Opposing $',v:fmt.usd(oppTot)},{l:'Targets named',v:s.rows.length}],
+    columns:s.cols,rows:top.map(r=>[r[0],fmt.usd(r[1]),fmt.usd(r[2]),fmt.usd(r[3])]),
+    chart:{type:'bar',label:'Total $ by target (top 12)',labels:top.slice(0,12).map(r=>r[0]),data:top.slice(0,12).map(r=>r[3])}};
+ },
+ flags(d){
+  const f=flags2(d.sheet);
+  const hot=f.rows.filter(r=>r[1]>0);
+  return {id:'flags',title:'Compliance flag screen',
+    narrative:hot.length?`${hot.map(r=>`${r[1]} transaction(s) flagged ${r[0]} totaling ${fmt.usd(r[2])}`).join('; ')}. Each flagged line should be matched to its filed report before any conclusion.`:'No transactions carry an Electioneering, Corporate funds, or Refund flag. Nothing to escalate from this screen.',
+    kpis:f.rows.map(r=>({l:r[0],v:r[1]})),
+    columns:f.cols,rows:f.rows.map(r=>[r[0],r[1],fmt.usd(r[2])]),
+    chart:{type:'bar',label:'Flagged transactions',labels:f.rows.map(r=>r[0]),data:f.rows.map(r=>r[1])}};
+ },
+ amendDupes(d){
+  const a=amendedDupes(d.sheet);
+  const overc=a.rows.reduce((s,r)=>s+r[3],0);
+  return {id:'amendDupes',title:'Amended-report duplicates',
+    narrative:a.rows.length?`${a.rows.length} transaction pair(s) are identical except for the Report ID, plus ${a.exactCount} exact duplicate pair(s). The amended pairs likely represent the same transaction restated in an amended filing; if both copies are summed, totals are overstated by up to ${fmt.usd(overc)}. ${a.note}`:`No amended-report duplicates found (${a.exactCount} exact duplicate pair(s)). Totals can be read without amendment adjustment.`,
+    kpis:[{l:'Amended pairs',v:a.rows.length},{l:'Exact duplicate pairs',v:a.exactCount},{l:'Potential overcount',v:fmt.usd(overc)}],
+    columns:a.cols,rows:a.rows.map(r=>[r[0],r[1],r[2],fmt.usd(r[3]),r[4],r[5]]),chart:null};
+ },
+ filings(d){
+  let found=findSheetLike(/source reports/i);
+  if(($('selScope')?$('selScope').value:'sheet')!=='combined'){const f=App.files[App.cur.file];found=found.filter(x=>x.file===f);}
+  const merged={headers:null,rows:[]};
+  found.forEach(x=>{if(!merged.headers)merged.headers=x.sheet.headers;
+    x.sheet.rows.forEach(r=>merged.rows.push(r));});
+  const h=filingHygiene(merged);
+  const sm=Object.fromEntries(h.summary);
+  return {id:'filings',title:'Filing hygiene (Source Reports)',
+    narrative:`${sm['Reports on file']} reports are on file${found.length>1?` across ${found.length} dossiers`:''}. ${sm['Amended']} (${(100*sm['Amendment rate']).toFixed(1)}%) are amendments — a high amendment rate usually means recurring data-entry or timing problems at the filer, not one-off mistakes. ${sm['Original document on file = No']} report(s) have no original document on file, and ${h.late.length} filing(s) were received more than 5 days after the period closed.`,
+    kpis:[{l:'Reports',v:sm['Reports on file']},{l:'Amendment rate',v:(100*sm['Amendment rate']).toFixed(1)+'%'},{l:'Received >5 days late',v:h.late.length},{l:'No original doc',v:sm['Original document on file = No']}],
+    columns:['Measure','Value'],rows:h.summary.map(r=>[r[0],typeof r[1]==='number'&&r[1]<1&&r[1]>0?(100*r[1]).toFixed(1)+'%':r[1]]),
+    chart:{type:'doughnut',label:'Report status mix',labels:['Filed (original)','Amended','Pre-election notices'],data:[sm['Filed (original)'],sm['Amended'],sm['Pre-election notices (INCRP)']]}};
+ },
+ contacts(d){
+  let found=findSheetLike(/^contact$/i);
+  if(($('selScope')?$('selScope').value:'sheet')!=='combined'){const f=App.files[App.cur.file];found=found.filter(x=>x.file===f);}
+  const merged={headers:found[0]?found[0].sheet.headers:['Type','Kind','Value'],rows:[]};
+  found.forEach(x=>x.sheet.rows.forEach(r=>merged.rows.push(r)));
+  const c=contactClusters(merged);
+  return {id:'contacts',title:'Contact normalization',
+    narrative:`${merged.rows.length} contact entries normalize to ${c.distinct} distinct value(s); ${c.variantClusters} cluster(s) have multiple spellings. Normalize before any counterparty matching or entity resolution — variant addresses are the most common reason cross-report matching silently fails.`,
+    kpis:[{l:'Entries',v:merged.rows.length},{l:'Distinct (normalized)',v:c.distinct},{l:'Clusters w/ variants',v:c.variantClusters}],
+    columns:c.cols,rows:c.rows,chart:null};
+ },
+ crossShared(d){
+  const s=sharedCounterparties(d.sheet);
+  return {id:'crossShared',title:'Cross-entity: shared counterparties',
+    narrative:s.rows.length?`${s.rows.length} counterparty name(s) appear in more than one dossier. Shared vendors or recipients across committees are the first place to look for coordination questions; per-entity totals are broken out below.`:`No counterparty appears in more than one of the loaded dossiers under the same name. Note this is a name match — run Contact normalization first, since the same vendor under variant spellings will not match here.`,
+    kpis:[{l:'Shared counterparties',v:s.rows.length},{l:'Entities compared',v:s.entities.length}],
+    columns:s.cols,rows:s.rows.map(r=>r.map((c,i)=>i&&typeof c==='number'?fmt.usd(c):c)),
+    chart:s.rows.length?{type:'bar',label:'Shared counterparty totals',labels:s.rows.slice(0,12).map(r=>r[0]),data:s.rows.slice(0,12).map(r=>r[r.length-1])}:null};
+ },
+ crossPurpose(d){
+  const c=crossPurpose2(d.sheet);
+  return {id:'crossPurpose',title:'Cross-entity: opposing activity',
+    narrative:c.rows.length?`${c.rows.length} candidate(s) drew money from opposite sides of the loaded dossiers — one entity spending in support (or directly for the candidate) while another spent in opposition. This is the head-to-head map of the entities' electoral activity and a natural exhibit for any coordination or independent-expenditure review.`:'No candidate was supported by one loaded entity and opposed by another. The dossiers do not appear to be in direct electoral conflict.',
+    kpis:[{l:'Contested candidates',v:c.rows.length}],
+    columns:c.cols,rows:c.rows.map(r=>[r[0],r[1],r[2],fmt.usd(r[3]),fmt.usd(r[4])]),
+    chart:c.rows.length?{type:'bar',label:'Opposing spend by candidate',labels:c.rows.slice(0,12).map(r=>r[0]),data:c.rows.slice(0,12).map(r=>r[4])}:null};
+ },
+ transfers(d){
+  const t=transfers2(d.sheet);
+  return {id:'transfers',title:'Cross-entity: possible transfers',
+    narrative:t.rows.length?`${t.rows.length} contribution(s) given by one entity match a contribution received by another on the same date for the same amount. Date+amount matching produces candidates, not findings — confirm the counterparty names line up before treating these as transfers.`:'No date-and-amount matches between one entity\u2019s contributions given and another\u2019s contributions received. No inter-entity transfers are indicated by this screen.',
+    kpis:[{l:'Candidate matches',v:t.rows.length}],
+    columns:t.cols,rows:t.rows.map(r=>[r[0],r[1],r[2],fmt.usd(r[3])]),chart:null};
+ }
+};
+
+/* ---- free-form question engine ---- */
+$('btnAsk').onclick=async()=>{
+  const q=$('inpQuestion').value.trim(); if(!q)return;
+  const d=analysisData(); if(!d){alert('Upload data first.');return;}
+  profileColumns(d);
+  if($('chkAI').checked){
+    $('footStatus').textContent='Asking AI assistant…';
+    const ai=await askAI(q,d);
+    $('footStatus').textContent='';
+    if(ai){addResult(ai);renderMoreSuggestions([]);return;}
+    $('suggestBanner').innerHTML='<div class="banner banner-warn">AI endpoint not reachable (it requires the Netlify deployment with an API key). Answered with the built-in query engine instead.</div>';
+  }
+  const res=localQuery(q,d);
+  addResult(res);renderMoreSuggestions([]);
+};
+function findCol(token){
+  token=token.trim().toLowerCase();
+  return App.profile.find(c=>c.header.toLowerCase()===token)
+    ||App.profile.find(c=>c.header.toLowerCase().includes(token))
+    ||App.profile.find(c=>token.includes(c.role));
+}
+function localQuery(q,d){
+  const ql=q.toLowerCase();
+  let rows=d.sheet.rows;
+  // where filters
+  const wm=ql.match(/where\s+(.+)$/);
+  let filterDesc='';
+  if(wm){
+    wm[1].split(/\s+and\s+/).forEach(cond=>{
+      let m=cond.match(/(.+?)\s*(>=|<=|=|>|<|contains)\s*(.+)/);
+      if(!m)return;
+      const col=findCol(m[1]); if(!col)return;
+      const op=m[2],val=m[3].replace(/["']/g,'').trim();
+      rows=rows.filter(r=>{
+        const cell=String(r[col.idx]).trim();
+        if(op==='contains')return cell.toLowerCase().includes(val.toLowerCase());
+        if(op==='='){const n1=toNum(cell),n2=toNum(val);return n1!=null&&n2!=null?n1===n2:cell.toLowerCase()===val.toLowerCase();}
+        const n=toNum(cell),v=toNum(val); if(n==null||v==null)return false;
+        return op==='>'?n>v:op==='<'?n<v:op==='>='?n>=v:n<=v;
+      });
+      filterDesc+=` where ${col.header} ${op} ${val}`;
+    });
+  }
+  const agg= /average|avg|mean/.test(ql)?'avg': /\bcounts?\b|how many|number of/.test(ql)?'count':
+             /max|largest|highest/.test(ql)&&!/top/.test(ql)?'max': /min|smallest|lowest/.test(ql)?'min':'sum';
+  const topM=ql.match(/top\s+(\d+)/); const topN=topM?+topM[1]:null;
+  const byM=ql.match(/\bby\s+([a-z0-9 _\/-]+?)(?:\s+where|$)/);
+  let byCol=byM?findCol(byM[1]):null;
+  // "top N <group> by <value>" idiom: group by the named column, rank by the value column
+  const topGrpM=ql.match(/top\s+\d+\s+([a-z0-9 _\/-]+?)\s+by\s+/);
+  if(topGrpM){const g2=findCol(topGrpM[1].trim());
+    if(g2&&g2.type!=='number'&&byCol&&(byCol.role==='amount'||byCol.type==='number'))byCol=g2;}
+  if(!byCol&&/(month|monthly)/.test(ql)&&firstDateCol())byCol={header:'Month',idx:-1,month:true};
+  if(!byCol&&!byM&&/top/.test(ql))byCol=colByRole('contributor')||colByRole('payee');
+  const valCol=firstNumCol();
+  const title=`Q: ${q}`;
+  if(byCol){
+    let g;
+    if(byCol.month||byCol.idx===-1){
+      const gm={};rows.forEach(r=>{const dt=firstDateCol();const m=dt?monthKey(r[dt.idx]):null;if(!m)return;const n=valCol?toNum(r[valCol.idx]):1;gm[m]=gm[m]||{sum:0,count:0};gm[m].count++;if(n!=null)gm[m].sum+=n;});
+      g=Object.keys(gm).sort().map(k=>({key:k,...gm[k]}));
+    }else g=groupSum(rows,byCol.idx,valCol?valCol.idx:byCol.idx);
+    if(agg==='avg')g.forEach(x=>x.sum=x.sum/(x.count||1));
+    if(agg==='count')g.forEach(x=>x.sum=x.count);
+    g.sort((a,b)=>byCol.month?0:b.sum-a.sum);
+    if(topN)g=g.slice(0,topN);
+    const isMoney=valCol&&agg!=='count';
+    return {id:'q'+Date.now(),title,
+      narrative:`${agg==='count'?'Count':agg==='avg'?'Average '+ (valCol?valCol.header:''):agg.toUpperCase()+' of '+(valCol?valCol.header:'rows')} grouped by ${byCol.month?'month':byCol.header}${filterDesc}. ${rows.length.toLocaleString()} matching rows. Leading group: ${g[0]?.key||'—'} (${isMoney?fmt.usd(g[0]?.sum||0):fmt.n(g[0]?.sum||0)}).`,
+      kpis:[{l:'Matching rows',v:rows.length.toLocaleString()},{l:'Groups',v:g.length}],
+      columns:[byCol.month?'Month':byCol.header,'Count',agg==='count'?'Count':(agg==='avg'?'Average':'Total')],
+      rows:g.map(x=>[x.key,x.count,isMoney?fmt.usd(x.sum):fmt.n(x.sum)]),
+      chart:{type:byCol.month?'line':'bar',label:title.slice(0,40),labels:g.slice(0,15).map(x=>x.key),data:g.slice(0,15).map(x=>x.sum)}};
+  }
+  // scalar answer
+  const ns=valCol?rows.map(r=>toNum(r[valCol.idx])).filter(n=>n!=null):[];
+  const v= agg==='count'?rows.length : agg==='avg'?ns.reduce((a,b)=>a+b,0)/(ns.length||1)
+        : agg==='max'?Math.max(...ns,0) : agg==='min'?(ns.length?Math.min(...ns):0) : ns.reduce((a,b)=>a+b,0);
+  return {id:'q'+Date.now(),title,
+    narrative:`${agg==='count'?'Row count':agg.charAt(0).toUpperCase()+agg.slice(1)+' of '+(valCol?valCol.header:'')}${filterDesc}: ${agg==='count'?v.toLocaleString():fmt.usd(v)} across ${rows.length.toLocaleString()} matching rows.`,
+    kpis:[{l:'Answer',v:agg==='count'?v.toLocaleString():fmt.usd(v)},{l:'Matching rows',v:rows.length.toLocaleString()}],
+    columns:d.sheet.headers,rows:rows.slice(0,100),chart:null};
+}
+
+/* ---- RAG via Netlify function ---- */
+async function askAI(q,d){
+  try{
+    // retrieve: score rows by term overlap (lightweight RAG)
+    const terms=q.toLowerCase().split(/\W+/).filter(t=>t.length>2);
+    const scored=d.sheet.rows.map((r,i)=>{const s=r.join(' ').toLowerCase();
+      return {i,r,score:terms.reduce((a,t)=>a+(s.includes(t)?1:0),0)};});
+    scored.sort((a,b)=>b.score-a.score);
+    const top=(scored[0]?.score>0?scored.slice(0,60):scored.slice(0,40)).map(x=>x.r);
+    const resp=await fetch('/.netlify/functions/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q,headers:d.sheet.headers,rows:top,
+        meta:{file:d.fileName,sheet:d.sheetName,totalRows:d.sheet.rows.length,corrections:App.changeLog.length}})});
+    if(!resp.ok)return null;
+    const out=await resp.json();
+    if(!out.answer)return null;
+    return {id:'ai'+Date.now(),title:`Q: ${q}`,ai:true,
+      narrative:out.answer,
+      kpis:[{l:'Rows reviewed by AI',v:top.length},{l:'Total rows',v:d.sheet.rows.length.toLocaleString()}],
+      columns:d.sheet.headers,rows:top.slice(0,50),
+      chart:out.chart&&out.chart.labels?{type:out.chart.type||'bar',label:out.chart.label||'AI result',labels:out.chart.labels,data:out.chart.data}:null};
+  }catch(e){return null;}
+}
+
+/* ---- results rendering ---- */
+function addResult(res){App.results.push(res);$('resultsPanel').classList.remove('hidden');renderResult(res);
+  document.getElementById('res-'+res.id)?.scrollIntoView({behavior:'smooth',block:'start'});}
+function chartColors(n){
+  const base=['#1C4475','#C9A227','#2E7D4F','#7A2E2E','#5B6770','#7FA8DB','#9A6A00','#4E7A5B','#A3672F','#33536B'];
+  return Array.from({length:n},(_,i)=>base[i%base.length]);
+}
+function restyleChart(ch){
+  const dark=document.documentElement.dataset.theme==='dark';
+  const tick=dark?'#9FB0C0':'#4E5D6C', grid=dark?'#2A3B4E':'#E2E7EC';
+  if(ch.options.scales){Object.values(ch.options.scales).forEach(s=>{s.ticks&&(s.ticks.color=tick);s.grid&&(s.grid.color=grid);});}
+  if(ch.options.plugins?.legend?.labels)ch.options.plugins.legend.labels.color=tick;
+  ch.update();
+}
+function renderResult(res){
+  const el=document.createElement('div');el.className='result';el.id='res-'+res.id;
+  el.innerHTML=`<div class="result-head"><h3>${fmt.esc(res.title)}</h3>
+    ${res.ai?'<span class="pill pill-info">AI-assisted</span>':''}
+    <div class="right" style="margin-left:auto;display:flex;gap:6px">
+      <button class="btn btn-outline btn-sm" data-dl="xlsx">XLSX</button>
+      <button class="btn btn-outline btn-sm" data-dl="csv">CSV</button>
+      <button class="btn btn-outline btn-sm" data-dl="pdf">PDF</button>
+    </div></div>
+    <div class="result-body">
+      ${res.kpis?.length?`<div class="kpis">${res.kpis.map(k=>`<div class="kpi"><div class="v">${fmt.esc(k.v)}</div><div class="l">${fmt.esc(k.l)}</div></div>`).join('')}</div>`:''}
+      <div class="narrative"><strong>Analysis.</strong> ${fmt.esc(res.narrative)}</div>
+      ${res.chart?`<div class="chartbox"><canvas id="ch-${res.id}"></canvas></div>`:''}
+      ${res.rows?.length?`<div class="tbl-scroll" style="max-height:330px"><table class="data"><thead><tr>${res.columns.map(c=>`<th>${fmt.esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${res.rows.slice(0,300).map(r=>`<tr>${r.map(c=>`<td>${fmt.esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+        ${res.rows.length>300?`<p class="muted">Showing 300 of ${res.rows.length} rows — exports include all rows.</p>`:''}`:'<p class="muted">No table rows for this result.</p>'}
+    </div>`;
+  $('resultsArea').appendChild(el);
+  el.querySelectorAll('[data-dl]').forEach(b=>b.onclick=()=>exportOne(res,b.dataset.dl));
+  if(res.chart){
+    const dark=document.documentElement.dataset.theme==='dark';
+    const colors=chartColors(res.chart.labels.length);
+    const ch=new Chart(el.querySelector('canvas'),{
+      type:res.chart.type,
+      data:{labels:res.chart.labels,datasets:[{label:res.chart.label,data:res.chart.data,
+        backgroundColor:res.chart.type==='line'?'rgba(28,68,117,.15)':colors,
+        borderColor:res.chart.type==='line'?'#C9A227':colors,borderWidth:res.chart.type==='line'?2.5:1,
+        fill:res.chart.type==='line',tension:.3,pointBackgroundColor:'#C9A227'}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:res.chart.type!=='bar',labels:{color:dark?'#9FB0C0':'#4E5D6C'}}},
+        scales:['bar','line'].includes(res.chart.type)?{x:{ticks:{color:dark?'#9FB0C0':'#4E5D6C',maxRotation:60},grid:{display:false}},
+          y:{ticks:{color:dark?'#9FB0C0':'#4E5D6C'},grid:{color:dark?'#2A3B4E':'#E2E7EC'}}}:{}}});
+    App.charts[res.id]=ch;
+  }
+}
+$('btnClearResults').onclick=()=>{App.results=[];Object.values(App.charts).forEach(c=>c.destroy());App.charts={};$('resultsArea').innerHTML='';$('moreSuggest').innerHTML='';$('resultsPanel').classList.add('hidden');};
+
+/* ---- follow-up suggestions ---- */
+function renderMoreSuggestions(ranIds){
+  const ran=new Set(App.results.map(r=>r.id));
+  const ideas=LIBRARY.filter(rep=>reportAvailable(rep)&&!ran.has(rep.id)).slice(0,4);
+  const extra=[];
+  if(colByRole('occupation'))extra.push('Try a free-form question: "total amount by occupation".');
+  if(firstDateCol())extra.push('Try: "top 10 contributors where amount > 500".');
+  $('moreSuggest').innerHTML= (ideas.length||extra.length)?`<hr class="divider">
+    <p class="eyebrow">Suggested next reports</p>
+    <div class="rep-grid" style="margin-top:10px">${ideas.map(rep=>
+      `<div class="rep-card"><div class="grow"><div class="t">${rep.title}</div><div class="d">${rep.desc}</div></div>
+       <button class="btn btn-gold btn-sm" onclick="runOne('${rep.id}')">Run</button></div>`).join('')}</div>
+    ${extra.length?`<p class="muted" style="margin-top:10px">${extra.join(' ')}</p>`:''}`:'';
+}
+function runOne(id){const d=analysisData();profileColumns(d);const r=RUNNERS[id]&&RUNNERS[id](d);if(r)addResult(r);renderMoreSuggestions([]);}
+
+/* ================= Exports ================= */
+/* ---- enhanced workbook export (v1 dossier -> v2 with Analysis sheet) ---- */
+$('btnEnhanced').onclick=()=>{
+  const scope=$('selScope')?$('selScope').value:'sheet';
+  const wb=XLSX.utils.book_new();
+  const used={};const sname=s=>{let n=s.replace(/[\\\/\?\*\[\]:]/g,'-').slice(0,31)||'Sheet';let b=n,k=2;while(used[n]){n=(b.slice(0,28))+' '+(k++);}used[n]=1;return n;};
+  if(scope==='combined'){
+    const t=combineFiles(App.files);
+    if(!t.rows.length){alert('No consolidated transaction data found. Upload at least one dossier-style workbook.');return;}
+    const label=`Entities ${App.files.filter(f=>f.entity).map(f=>f.entity).join(' + ')||'(combined)'}`;
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildAnalysisAoA(t,label+' — combined')),'Analysis');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([t.headers,...t.rows]),'All Transactions');
+    App.files.forEach(f=>Object.entries(f.sheets).forEach(([sn,s])=>{
+      if(sn==='All Transactions')return;
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([s.headers,...s.rows]),sname(`${f.entity||'F'} ${sn}`));
+    }));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
+    XLSX.writeFile(wb,`COPP-combined-enhanced-${new Date().toISOString().slice(0,10)}.xlsx`);
+    return;
+  }
+  const f=App.files[App.cur.file];
+  if(!f||!f.sheets['All Transactions']){alert('The current file has no consolidated All Transactions sheet. Enhanced export needs a dossier-style workbook.');return;}
+  const t=f.sheets['All Transactions'];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildAnalysisAoA(t,`Entity ${f.entity||f.name}`)),'Analysis');
+  Object.entries(f.sheets).forEach(([sn,s])=>{
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([s.headers,...s.rows]),sname(sn));
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
+  XLSX.writeFile(wb,`${f.name.replace(/\.(xlsx|xls|csv)$/i,'')}-enhanced.xlsx`);
+};
+
+function triggerDl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);}
+function downloadCSV(rows,name){
+  const csv=rows.map(r=>r.map(c=>{const s=String(c??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}).join(',')).join('\r\n');
+  triggerDl(new Blob(["\uFEFF"+csv],{type:'text/csv'}),name);
+}
+function changeLogAoA(){return [['#','Timestamp','Method','File','Sheet','Row','Column','Old value','New value','Issue type'],
+  ...App.changeLog.map(e=>[e.n,e.ts,e.method,e.file,e.sheet,e.row,e.header,e.old,e.new,e.issueType])];}
+function safeName(s){return s.replace(/[^a-z0-9 \-_]/gi,'').slice(0,40)||'report';}
+
+function exportOne(res,kind){
+  if(kind==='csv'){downloadCSV([res.columns,...res.rows,[],['— Phase 1 change log —'],...changeLogAoA()],`COPP-${safeName(res.title)}.csv`);return;}
+  if(kind==='xlsx'){
+    const wb=XLSX.utils.book_new();
+    const front=[['Montana COPP Analytic Tool'],['Report',res.title],['Generated',new Date().toLocaleString()],
+      ['Source',analysisData()?.fileName||''],['Corrections applied (Phase 1)',App.changeLog.length],[],['Analysis'],[res.narrative]];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(front),'Report');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([res.columns,...res.rows]),'Data');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
+    XLSX.writeFile(wb,`COPP-${safeName(res.title)}.xlsx`);return;
+  }
+  if(kind==='pdf')pdfReport([res],`COPP-${safeName(res.title)}.pdf`);
+}
+$('btnDlAllXlsx').onclick=()=>{
+  if(!App.results.length)return;
+  const wb=XLSX.utils.book_new();
+  const front=[['Montana COPP Analytic Tool — Session Report'],['Generated',new Date().toLocaleString()],
+    ['Source file(s)',App.files.map(f=>f.name).join('; ')],['Reports included',App.results.length],
+    ['Phase 1 corrections recorded',App.changeLog.length],[],
+    ['#','Report','Analysis']];
+  App.results.forEach((r,i)=>front.push([i+1,r.title,r.narrative]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(front),'Summary');
+  App.results.forEach((r,i)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([[r.title],[r.narrative],[],r.columns,...r.rows]),`R${i+1} ${safeName(r.title).slice(0,24)}`));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
+  XLSX.writeFile(wb,`COPP-full-report-${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+$('btnDlAllPdf').onclick=()=>{if(App.results.length)pdfReport(App.results,`COPP-full-report-${new Date().toISOString().slice(0,10)}.pdf`);};
+
+function pdfReport(results,name){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'letter'});
+  const W=doc.internal.pageSize.getWidth();
+  // cover band
+  doc.setFillColor(10,34,64);doc.rect(0,0,W,86,'F');doc.setFillColor(201,162,39);doc.rect(0,86,W,4,'F');
+  doc.setTextColor(255);doc.setFont('times','bold');doc.setFontSize(18);doc.text('Montana COPP Analytic Tool',40,38);
+  doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(199,211,224);
+  doc.text('Commissioner of Political Practices · Analysis report · '+new Date().toLocaleString(),40,56);
+  doc.text('Source: '+App.files.map(f=>f.name).join('; ').slice(0,110),40,70);
+  let y=116;
+  results.forEach((res,ri)=>{
+    if(y>660){doc.addPage();y=50;}
+    doc.setTextColor(28,68,117);doc.setFont('times','bold');doc.setFontSize(14);
+    doc.text(`${ri+1}. ${res.title}`,40,y);y+=8;
+    doc.setDrawColor(201,162,39);doc.setLineWidth(1.5);doc.line(40,y,200,y);y+=14;
+    doc.setTextColor(40);doc.setFont('helvetica','normal');doc.setFontSize(9.5);
+    const wrapped=doc.splitTextToSize('Analysis: '+res.narrative,W-80);
+    doc.text(wrapped,40,y);y+=wrapped.length*12+6;
+    const ch=App.charts[res.id];
+    if(ch){try{const img=ch.toBase64Image('image/png',1);
+      const h=180,w=Math.min(W-80,420);
+      if(y+h>720){doc.addPage();y=50;}
+      doc.setFillColor(255,255,255);doc.rect(40,y,w,h,'F');
+      doc.addImage(img,'PNG',40,y,w,h);y+=h+12;}catch(e){}}
+    if(res.rows?.length){
+      doc.autoTable({startY:y,head:[res.columns],body:res.rows.slice(0,40).map(r=>r.map(String)),
+        margin:{left:40,right:40},styles:{fontSize:7.5,cellPadding:3},
+        headStyles:{fillColor:[19,51,90],textColor:255},alternateRowStyles:{fillColor:[238,241,244]}});
+      y=doc.lastAutoTable.finalY+10;
+      if(res.rows.length>40){doc.setFontSize(8);doc.setTextColor(120);doc.text(`(${res.rows.length-40} additional rows in the XLSX/CSV export)`,40,y);y+=16;}
+    }
+    y+=8;
+  });
+  // change log
+  doc.addPage();
+  doc.setTextColor(28,68,117);doc.setFont('times','bold');doc.setFontSize(14);doc.text('Phase 1 change log (audit trail)',40,50);
+  doc.setDrawColor(201,162,39);doc.line(40,58,260,58);
+  if(App.changeLog.length){
+    doc.autoTable({startY:70,head:[changeLogAoA()[0]],body:changeLogAoA().slice(1).map(r=>r.map(String)),
+      margin:{left:40,right:40},styles:{fontSize:7,cellPadding:2.5},headStyles:{fillColor:[19,51,90],textColor:255}});
+  }else{doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(80);doc.text('No changes were made to the uploaded data.',40,78);}
+  // page numbers
+  const pages=doc.getNumberOfPages();
+  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(130);
+    doc.text(`Montana COPP Analytic Tool · page ${i} of ${pages}`,W-200,770);}
+  doc.save(name);
+}
+
+refreshAll();
+</script>
+</body>
+</html>
