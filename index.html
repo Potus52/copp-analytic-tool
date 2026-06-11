@@ -1174,7 +1174,7 @@ function profileColumns(d){
       if(parseDate(v))date++;
     });
     const isNum=sample.length&&num/sample.length>0.85;
-    const isDate=!isNum&&sample.length&&date/sample.length>0.7;
+    const isDate=!isNum&&sample.length>=5&&date/sample.length>0.7;
     let role='text';
     for(const[r,rx]of Object.entries(ROLE_HINTS)){if(rx.test(h)){role=r;break;}}
     if(role==='text'&&isNum)role='number';
