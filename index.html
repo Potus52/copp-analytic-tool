@@ -407,7 +407,8 @@ footer{border-top:1px solid var(--line);background:var(--surface);margin-top:30p
     <div class="m-body">
       <h4>Phase 1 — Upload &amp; Validate</h4>
       <ol>
-        <li><strong>Upload</strong> one or more dossier files (.xlsx, .xls, or .csv) by dragging them onto the drop zone or clicking it. CERS and DLam exports work as-is. Entity dossiers with banner rows, multiple sections per sheet (Contributions Given / Received, Expenditures Made), per-year tabs, and subtotal rows are detected automatically: sections are consolidated into an <strong>All Transactions</strong> sheet with Entity, Year, Flow, Quarter, and Recipient Type columns derived, and subtotal rows excluded so totals are never double-counted.</li>
+        <li><strong>Upload</strong> one or more dossier files (.xlsx, .xls, or .csv) by dragging them onto the drop zone or clicking it. CERS and DLam exports work as-is. Entity dossiers with banner rows, multiple sections per sheet (Contributions Given / Received, Expenditures Made), per-year tabs, and subtotal rows are detected automatically: sections are consolidated into an <strong>All Transactions</strong> sheet with Entity, Year, Flow, Quarter, Employer, Occupation, and Recipient Type columns derived, and subtotal rows excluded so totals are never double-counted. Contact, Identity, Registrations, and Source Reports sheets are kept and feed their own reports.</li>
+        <li>An <strong>import check</strong> runs on every dossier: the tool reconciles its consolidated totals against the dossier's own Summary sheet, year by year and flow by flow, and verifies every sheet was readable. If problems are found you get three choices: <strong>Attempt automatic repair</strong> (re-reads unreadable sheets with a best-effort parser, infers missing headers from the data, assigns the flow using the Summary sheet, and records everything in the change log), keep the file as-is, or remove it. A clean check is confirmed in the status bar.</li>
         <li><strong>Review</strong> the data preview. The tool detects column types (amounts, dates, names, locations) automatically.</li>
         <li><strong>Run the error scan.</strong> Each finding can be corrected inline, auto-fixed, or accepted as-is. You can also click any cell in the preview to edit it directly.</li>
         <li>Every change is recorded in the <strong>change log</strong>, which is included in all exported reports for a complete audit trail.</li>
@@ -425,6 +426,23 @@ footer{border-top:1px solid var(--line);background:var(--surface);margin-top:30p
       <p>All parsing, validation, and built-in analysis run entirely in your browser. Data leaves your machine only if you enable the AI assistant, and then only the small set of rows relevant to your question is sent.</p>
       <h4>Saving your work</h4>
       <p>Use <em>Save session</em> in the header to download a session file containing your data, corrections, and results. Resume later with <em>Resume saved session</em>.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Import check modal ===== -->
+<div class="modal-bg" id="modalImportCheck" role="dialog" aria-modal="true" aria-labelledby="icTitle">
+  <div class="modal">
+    <div class="m-head"><h3 id="icTitle">Import check</h3></div>
+    <div class="m-body">
+      <p>The import check found problems with <strong id="icFile"></strong>. The file was still loaded, and the readable parts work normally, but review the findings below before relying on totals.</p>
+      <ul id="icList" style="margin:10px 0 14px 20px; line-height:1.55"></ul>
+      <p class="muted">Automatic repair re-reads unreadable sheets with a best-effort parser, adds recovered rows, rebuilds the consolidated table, and records everything in the change log. Reconciliation mismatches cannot be repaired automatically; they usually mean the export is incomplete, so re-export the dossier from CERS if a mismatch persists.</p>
+      <div class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap">
+        <button class="btn btn-gold" id="btnIcRepair" type="button">Attempt automatic repair</button>
+        <button class="btn btn-primary" id="btnIcKeep" type="button">Keep file as-is</button>
+        <button class="btn btn-outline" id="btnIcRemove" type="button">Remove file</button>
+      </div>
     </div>
   </div>
 </div>
@@ -521,6 +539,17 @@ function isBannerRow(r){
   return rowFilledCount(r)===1 && (/^MT Campaign Finance/i.test(a)||/^Generated /i.test(a));
 }
 function entityFromText(s){const m=/entity[\s_\-]*?(\d{3,})/i.exec(String(s));return m?m[1]:null;}
+function entityNameFromText(s){
+  s=String(s);
+  let name=null;
+  let m=/Dossier:\s*(.+)$/i.exec(s); if(m)name=m[1];
+  if(!name){m=/Entity\s+\d+\s*[:\u2014\u2013-]\s*(.+)$/i.exec(s); if(m)name=m[1];}
+  if(!name)return null;
+  name=name.replace(/^(Identity|Contact|Registrations|Summary)\s*[\u2014\u2013-]\s*/i,'');
+  name=name.replace(/^(19|20)\d{2}\s+Activity\s*[\u2014\u2013-]\s*/i,'');
+  name=name.trim();
+  return name&&!/^(19|20)\d{2}/.test(name)?name:null;
+}
 
 /* Returns {plain:true} if the sheet is an ordinary table, else parsed sections */
 function parseSheetSmart(aoa){
@@ -537,10 +566,10 @@ function parseSheetSmart(aoa){
     return{plain:true,sections:[{title:'',headers,rows:body}]};
   }
   // structured dossier sheet: walk rows, find titled sections
-  const sections=[]; let i=0; let entity=null;
+  const sections=[]; let i=0; let entity=null; let entityName=null;
   while(i<rows.length){
     const r=rows[i];
-    if(isBannerRow(r)){entity=entity||entityFromText(r[0]);i++;continue;}
+    if(isBannerRow(r)){entity=entity||entityFromText(r[0]);entityName=entityName||entityNameFromText(r[0]);i++;continue;}
     if(rowFilledCount(r)===0){i++;continue;}
     if(rowFilledCount(r)===1||rowFilledCount(r)===2){
       // candidate section title; header row must follow within 2 rows
@@ -585,7 +614,7 @@ function parseSheetSmart(aoa){
     sections.push({title:'',headers,rows:body});
     i=k;
   }
-  return{sections,entity};
+  return{sections,entity,entityName};
 }
 
 const META_SHEET=/^(summary|contact|source reports|registrations|analysis)$/i;
@@ -593,8 +622,8 @@ const YEAR_SHEET=/^(19|20)\d{2}$/;
 
 /* Canonical consolidated columns for All Transactions */
 const TX_COLS=['Entity','Year','Flow','Date','Counterparty','Office','Party','Election',
- 'Supporting / opposing','Description','Purpose','Platform','Quantity','Refund','Corp Funds',
- 'Electioneering','Amount','Schedule','Report ID','Quarter','Recipient Type'];
+ 'Supporting / opposing','Description','Purpose','Platform','Quantity','Employer','Occupation',
+ 'Prior obligation','Refund','Corp Funds','Electioneering','Amount','Schedule','Report ID','Quarter','Recipient Type'];
 
 function quarterOf(dateStr){
   const m=/^(\d{4})-(\d{2})/.exec(String(dateStr).trim());
@@ -625,7 +654,9 @@ function buildConsolidated(parsedSheets, entityId){
           office,norm0(get(r,'Party')),get(r,'Election'),
           get(r,'Supporting / opposing','Supporting/Opposing'),
           get(r,'Description'),get(r,'Purpose'),get(r,'Platform'),
-          get(r,'Quantity','Line item detail')&&get(r,'Quantity')||get(r,'Quantity'),
+          get(r,'Quantity'),
+          get(r,'Employer'),get(r,'Occupation'),
+          get(r,'Payment on prior obligation','Prior obligation'),
           get(r,'Refund'),get(r,'Corp Funds'),get(r,'Electioneering'),
           amt,get(r,'Schedule'),get(r,'Report ID'),
           quarterOf(date),
@@ -640,13 +671,14 @@ function buildConsolidated(parsedSheets, entityId){
 
 /* Parse one workbook's aoa map into the App.files entry */
 function parseDossierFile(fileName, aoaBySheet){
-  let entity=entityFromText(fileName);
+  let entity=entityFromText(fileName); let entityName=null;
   const parsedSheets=[]; const sheets={}; let structured=false;
   for(const [sn,aoa] of Object.entries(aoaBySheet)){
     const p=parseSheetSmart(aoa);
     if(!p.sections.length)continue;
     if(!p.plain)structured=true;
     entity=entity||p.entity||null;
+    entityName=entityName||p.entityName||null;
     parsedSheets.push({sheetName:sn,sections:p.sections,plain:!!p.plain});
   }
   if(!structured){
@@ -669,7 +701,7 @@ function parseDossierFile(fileName, aoaBySheet){
       if(sec)sheets[ps.sheetName]={headers:sec.headers,rows:sec.rows};
     }
   }
-  return{name:fileName,sheets,entity,dossier:true};
+  return{name:fileName,sheets,entity,entityName,dossier:true};
 }
 
 /* Combined dataset across all loaded files that have an All Transactions sheet */
@@ -922,6 +954,127 @@ function buildAnalysisAoA(t,label){
 }
 
 
+/* ===== Import diagnostics & repair ===== */
+/* Reads the dossier's own Summary sheet and reconciles it against the
+   consolidated totals; reports unreadable sheets and dropped rows. */
+function parseSummaryTotals(aoa){
+  if(!aoa)return null;
+  const rows=aoa.map(r=>r.map(c=>String(c==null?'':c).trim()));
+  const hi=rows.findIndex(r=>r[0]==='Year'&&/given/i.test(r[1]||'')&&/expend/i.test(r[3]||''));
+  if(hi<0)return null;
+  const out={years:{},total:null};
+  for(let i=hi+1;i<rows.length;i++){
+    const r=rows[i]; if(!r[0])break;
+    const rec={given:+r[1]||0,received:+r[2]||0,expend:+r[3]||0};
+    if(/^total$/i.test(r[0]))out.total=rec; else if(/^(19|20)\d{2}$/.test(r[0]))out.years[r[0]]=rec;
+    else break;
+  }
+  return out;
+}
+function diagnoseFile(parsed,aoaBySheet){
+  const issues=[]; const fixable=[];
+  if(!parsed.dossier)return{issues,fixable};
+  const tx=parsed.sheets['All Transactions'];
+  // 1. year sheets that produced no rows despite having content
+  for(const[sn,aoa]of Object.entries(aoaBySheet)){
+    if(!YEAR_SHEET.test(sn))continue;
+    const raw=aoa.filter(r=>r.some(c=>String(c==null?'':c).trim()!=='')).length;
+    const got=tx?tx.rows.filter(r=>r[1]===sn).length:0;
+    if(raw>6&&got===0){issues.push(`Sheet "${sn}" has ${raw} rows of content but none could be read as transactions.`);fixable.push(sn);}
+  }
+  // 2. reconcile against the dossier's own Summary
+  const sum=parseSummaryTotals(aoaBySheet['Summary']);
+  if(sum&&tx){
+    const i={};tx.headers.forEach((h,k)=>i[h]=k);
+    const calc=(flow,year)=>tx.rows.filter(r=>r[i.Flow]===flow&&(!year||r[i.Year]===year))
+      .reduce((a,r)=>a+(toNum(r[i.Amount])||0),0);
+    const cmp=(label,year,rec)=>{
+      [['Contribution Given','given'],['Contribution Received','received'],['Expenditure','expend']].forEach(([flow,key])=>{
+        const got=Math.round(calc(flow,year)),want=Math.round(rec[key]);
+        if(Math.abs(got-want)>1)issues.push(`${label} ${flow.toLowerCase()}s read as ${fmt.usd(got)} but the dossier's Summary sheet says ${fmt.usd(want)}.`);
+      });
+    };
+    Object.entries(sum.years).forEach(([y,rec])=>cmp(`Year ${y}:`,y,rec));
+    if(sum.total)cmp('All years:',null,sum.total);
+  }else if(!sum&&aoaBySheet['Summary']){
+    issues.push('The Summary sheet could not be read for reconciliation. Totals were not independently verified.');
+  }
+  return{issues,fixable};
+}
+/* Best-effort repair: re-read a failed sheet by locating its densest
+   header-like row and taking everything below it. */
+function forceTableParse(aoa){
+  let best=-1,bestScore=-1,bestHasKey=false;
+  aoa.forEach((r,i)=>{
+    const filled=r.filter(c=>String(c==null?'':c).trim()!=='').length;
+    const hasKey=r.some(c=>/^(date|amount|counterparty|donor)$/i.test(String(c).trim()));
+    const score=filled+(hasKey?10:0);
+    if(score>bestScore&&filled>=3){bestScore=score;best=i;bestHasKey=hasKey;}
+  });
+  if(best<0)return null;
+  let H,startRow;
+  if(bestHasKey){
+    const headers=aoa[best].map((h,k)=>String(h||'').trim()||`Column ${k+1}`);
+    let last=headers.length;while(last>0&&/^Column \d+$/.test(headers[last-1]))last--;
+    H=headers.slice(0,last);startRow=best+1;
+  }else{
+    // no recognizable header row anywhere: synthesize headers from column content
+    const data=aoa.slice(best).filter(r=>r&&r.some(c=>String(c==null?'':c).trim()!=='')&&!isSubtotalRow(r)&&!isBannerRow(r));
+    const ncol=Math.max(...data.map(r=>r.length));
+    H=[];
+    for(let c=0;c<ncol;c++){
+      const vals=data.map(r=>String(r[c]??'').trim()).filter(v=>v!=='');
+      const frac=re=>vals.length?vals.filter(v=>re.test(v)).length/vals.length:0;
+      if(frac(/^\d{4}-\d{2}-\d{2}$/)>0.7&&!H.includes('Date'))H.push('Date');
+      else if(frac(/^[YN]$/i)>0.8)H.push(H.filter(x=>/^Flag/.test(x)).length?'Flag '+(H.filter(x=>/^Flag/.test(x)).length+1):'Flag 1');
+      else if(frac(/^[A-D]$/)>0.8&&!H.includes('Schedule'))H.push('Schedule');
+      else if(frac(/^\d{4,6}$/)>0.8&&!H.includes('Report ID'))H.push('Report ID');
+      else if(frac(/^-?[\d,]+(\.\d+)?$/)>0.7&&!H.includes('Amount'))H.push('Amount');
+      else if(vals.length&&vals.join('').length/vals.length>5&&!H.includes('Counterparty'))H.push('Counterparty');
+      else H.push('Column '+(c+1));
+    }
+    // start from the first data-like row, not the densest one
+    startRow=aoa.findIndex(r=>r&&r.filter(c=>String(c==null?'':c).trim()!=='').length>=3&&!isBannerRow(r)&&!isSubtotalRow(r));
+    if(startRow<0)startRow=best;
+  }
+  const rows=[];
+  for(let k=startRow;k<aoa.length;k++){
+    const r=aoa[k];
+    if(!r||!r.some(c=>String(c==null?'':c).trim()!==''))continue;
+    if(isSubtotalRow(r)||isBannerRow(r))continue;
+    if(r.filter(c=>String(c==null?'':c).trim()!=='').length<=2&&!String(r[0]||'').trim())continue;
+    rows.push(H.map((_,ci)=>String(r[ci]??'')));
+  }
+  return rows.length?{title:'Recovered data',headers:H,rows}:null;
+}
+function repairFile(fileIdx){
+  const f=App.files[fileIdx]; const raw=f._raw||{};
+  let repaired=0;
+  (f._diag?f._diag.fixable:[]).forEach(sn=>{
+    const t=forceTableParse(raw[sn]||[]);
+    if(t){f.sheets[`${sn} · ${t.title}`]={headers:t.headers,rows:t.rows};repaired++;
+      logChange({file:f.name,sheet:sn,row:'—',header:'—',old:'(unreadable)',new:`${t.rows.length} rows recovered`,method:'Import repair',issueType:'Unreadable sheet'});}
+  });
+  // rebuild consolidation including recovered sections
+  if(repaired){
+    const sum=parseSummaryTotals(raw['Summary']);
+    const flowFor=sn=>{
+      const rec=sum&&sum.years[sn];
+      if(rec){const live=[['Contributions Given',rec.given],['Contributions Received',rec.received],['Expenditures Made',rec.expend]].filter(([,v])=>v>0);
+        if(live.length===1)return live[0][0];}
+      return 'Recovered (verify flow)';
+    };
+    const parsedSheets=Object.entries(raw).map(([sn,aoa])=>({sheetName:sn,sections:parseSheetSmart(aoa).sections}));
+    (f._diag?f._diag.fixable:[]).forEach(sn=>{
+      const t=forceTableParse(raw[sn]||[]);
+      if(t){const ps=parsedSheets.find(p=>p.sheetName===sn);if(ps)ps.sections=[{title:flowFor(sn),headers:t.headers,rows:t.rows}];}
+    });
+    const cons=buildConsolidated(parsedSheets,f.entity);
+    if(cons.rows.length)f.sheets['All Transactions']=cons;
+    f.repaired=true;
+  }
+  return repaired;
+}
 /*<<END DOSSIER-CORE>>*/
 
 /* ---------- file ingestion ---------- */
@@ -945,9 +1098,13 @@ async function handleFiles(list){
         if(aoa.length)aoaBySheet[sn]=aoa;
       });
       const parsed=parseDossierFile(f.name,aoaBySheet);
-      if(!Object.keys(parsed.sheets).length){alert(`${f.name}: no readable data found.`);continue;}
+      if(!Object.keys(parsed.sheets).length){alert(`${f.name}: no readable data found. If this is an Excel file, make sure it is not password protected, then try again. If it keeps failing, re-export it from CERS as .xlsx.`);continue;}
+      parsed._raw=aoaBySheet;
+      parsed._diag=diagnoseFile(parsed,aoaBySheet);
       App.files.push(parsed);
       if(parsed.dossier)$('footStatus').textContent=`Dossier structure detected in ${f.name}${parsed.entity?` (Entity ${parsed.entity})`:''}: sections were consolidated into an "All Transactions" sheet; subtotal and banner rows were excluded.`;
+      if(parsed._diag.issues.length)queueImportCheck(App.files.length-1);
+      else if(parsed.dossier)$('footStatus').textContent+=` Import check passed: totals reconcile with the dossier's Summary sheet.`;
     }catch(err){alert(`Could not read ${f.name}: ${err.message}`);}
   }
   fi.value='';
@@ -955,6 +1112,35 @@ async function handleFiles(list){
   App.scanned=false; App.issues=[];
   refreshAll();
 }
+
+/* ---- import check modal ---- */
+const importQueue=[];
+function queueImportCheck(idx){importQueue.push(idx);if(importQueue.length===1)showImportCheck();}
+function showImportCheck(){
+  const idx=importQueue[0]; if(idx==null)return;
+  const f=App.files[idx]; if(!f){importQueue.shift();return showNextImportCheck();}
+  const d=f._diag||{issues:[],fixable:[]};
+  $('icFile').textContent=f.name+(f.entity?` (Entity ${f.entity}${f.entityName?' · '+f.entityName:''})`:'');
+  $('icList').innerHTML=d.issues.map(m=>`<li>${fmt.esc(m)}</li>`).join('');
+  $('btnIcRepair').classList.toggle('hidden',!d.fixable.length);
+  $('btnIcRepair').textContent=`Attempt automatic repair (${d.fixable.length} sheet${d.fixable.length===1?'':'s'})`;
+  $('modalImportCheck').classList.add('open');
+}
+function showNextImportCheck(){$('modalImportCheck').classList.remove('open');importQueue.shift();if(importQueue.length)showImportCheck();else refreshAll();}
+$('btnIcRepair').onclick=()=>{
+  const idx=importQueue[0]; const f=App.files[idx];
+  const n=repairFile(idx);
+  f._diag=diagnoseFile(f,f._raw||{});
+  alert(n?`${n} sheet${n===1?'':'s'} recovered. Recovered rows were added to the file and the consolidated table was rebuilt. The repair is recorded in the change log. Re-run the error scan and verify the recovered rows before relying on them.`:'No rows could be recovered automatically. You can keep the file (readable sheets still work) or remove it and re-export the dossier from CERS.');
+  showNextImportCheck();
+};
+$('btnIcKeep').onclick=()=>showNextImportCheck();
+$('btnIcRemove').onclick=()=>{
+  const idx=importQueue[0];
+  App.files.splice(idx,1);
+  App.cur={file:0,sheet:App.files[0]?Object.keys(App.files[0].sheets)[0]:''};
+  showNextImportCheck();
+};
 
 function curData(){
   const f=App.files[App.cur.file]; if(!f)return null;
@@ -1019,7 +1205,7 @@ function renderFileList(){
   $('fileList').innerHTML=App.files.map((f,i)=>{
     const sn=Object.keys(f.sheets), rows=sn.reduce((a,s)=>a+f.sheets[s].rows.length,0);
     return `<div class="filechip"><span>&#128196;</span><strong>${fmt.esc(f.name)}</strong>
-      ${f.entity?`<span class="pill pill-info" title="Entity ID detected from the dossier">Entity ${fmt.esc(f.entity)}</span>`:''}${f.dossier?`<span class="pill pill-ok" title="Multi-section dossier consolidated into All Transactions">dossier</span>`:''}
+      ${f.entity?`<span class="pill pill-info" title="Entity ID detected from the dossier">Entity ${fmt.esc(f.entity)}${f.entityName?` · ${fmt.esc(f.entityName)}`:''}</span>`:''}${f.dossier?`<span class="pill pill-ok" title="Multi-section dossier consolidated into All Transactions">dossier</span>`:''}${f.repaired?`<span class="pill pill-warn" title="One or more sheets were recovered with best-effort parsing. Verify recovered rows in Phase 1.">repaired</span>`:''}${f._diag&&f._diag.issues.length?`<span class="pill pill-warn" title="${fmt.esc(f._diag.issues.join(' '))}">import check: ${f._diag.issues.length}</span>`:''}
       <span class="meta">${sn.length} sheet${sn.length>1?'s':''} · ${rows.toLocaleString()} rows</span>
       <button class="x" title="Remove file" onclick="removeFile(${i})">&times;</button></div>`;
   }).join('');
@@ -1233,7 +1419,8 @@ $('btnClearAll').onclick=()=>{
 
 /* ---------- session save / load ---------- */
 $('btnSaveSession').onclick=()=>{
-  const blob=new Blob([JSON.stringify({v:1,files:App.files,changeLog:App.changeLog,issues:App.issues,scanned:App.scanned,cur:App.cur,results:App.results},null,1)],{type:'application/json'});
+  const slimFiles=App.files.map(f=>{const{_raw,...rest}=f;return rest;});
+  const blob=new Blob([JSON.stringify({v:1,files:slimFiles,changeLog:App.changeLog,issues:App.issues,scanned:App.scanned,cur:App.cur,results:App.results},null,1)],{type:'application/json'});
   triggerDl(blob,`COPP-session-${new Date().toISOString().slice(0,10)}.json`);
 };
 $('btnLoadSession').onclick=()=>$('sessionInput').click();
@@ -1296,7 +1483,7 @@ const LIBRARY=[
  {id:'flags',title:'Compliance flag screen',desc:'Counts and totals for Electioneering = Y, Corporate funds = Y, and Refund = Y transactions.',needs:[],needsHdr:['Refund','Amount'],chart:'bar'},
  {id:'amendDupes',title:'Amended-report duplicates',desc:'Transactions that appear twice under different Report IDs \u2014 usually an amended filing restating the line, which double-counts totals if untreated.',needs:[],needsHdr:['Report ID'],chart:null},
  {id:'filings',title:'Filing hygiene (Source Reports)',desc:'Amendment rate, pre-election notices, missing original documents, and filings received well after period end.',needs:[],needsSheet:'source reports',chart:'bar'},
- {id:'contacts',title:'Contact normalization',desc:'Clusters address and contact variants (PO Box 87 six different ways) to a canonical form before any entity-level matching.',needs:[],needsSheet:'contact',chart:null},
+ {id:'contacts',title:'Contact normalization',desc:'Clusters address and contact variants (PO Box 87 six different ways) to a canonical form before any entity-level matching. Reads Contact and Identity sheets.',needs:[],needsSheet:'^(contact|identity)$',chart:null},
  {id:'crossShared',title:'Cross-entity: shared counterparties',desc:'Counterparties that appear in more than one uploaded dossier, with per-entity totals.',needs:[],needsHdr:['Entity','Counterparty'],multi:true,chart:'bar'},
  {id:'crossPurpose',title:'Cross-entity: opposing activity',desc:'Candidates that one entity spent supporting while another spent opposing \u2014 the head-to-head view across dossiers.',needs:[],needsHdr:['Supporting / opposing'],multi:true,chart:'bar'},
  {id:'transfers',title:'Cross-entity: possible transfers',desc:'Contributions given by one entity that match (date + amount) contributions received by another \u2014 candidate inter-entity money flows.',needs:[],needsHdr:['Flow'],multi:true,chart:null}
@@ -1380,7 +1567,7 @@ $('btnSuggest').onclick=()=>{
   if(hasHdr(d,'Supporting / opposing')&&d.sheet.rows.some(r=>String(r[d.sheet.headers.indexOf('Supporting / opposing')]).trim()))recs.push(['supportOppose','Supporting / opposing detail present — independent-expenditure targets can be totaled.']);
   if(hasHdr(d,'Report ID'))recs.push(['amendDupes','Report IDs present — amended filings can restate lines and silently double-count totals.']);
   if(findSheetLike(/source reports/i).length)recs.push(['filings','A Source Reports sheet was found — filing hygiene (amendment rate, late receipt) is reviewable.']);
-  if(findSheetLike(/^contact$/i).length)recs.push(['contacts','A Contact sheet was found — address variants should be normalized before matching.']);
+  if(findSheetLike(/^(contact|identity)$/i).length)recs.push(['contacts','A Contact sheet was found — address variants should be normalized before matching.']);
   if(entityCountIn(d.sheet)>1){
     recs.push(['crossShared','Multiple entities in scope — shared counterparties are the first coordination screen.']);
     if(hasHdr(d,'Supporting / opposing'))recs.push(['crossPurpose','Multiple entities with support/oppose detail — head-to-head electoral activity can be mapped.']);
@@ -1594,10 +1781,14 @@ const RUNNERS={
     chart:{type:'doughnut',label:'Report status mix',labels:['Filed (original)','Amended','Pre-election notices'],data:[sm['Filed (original)'],sm['Amended'],sm['Pre-election notices (INCRP)']]}};
  },
  contacts(d){
-  let found=findSheetLike(/^contact$/i);
+  let found=findSheetLike(/^(contact|identity)$/i);
   if(($('selScope')?$('selScope').value:'sheet')!=='combined'){const f=App.files[App.cur.file];found=found.filter(x=>x.file===f);}
-  const merged={headers:found[0]?found[0].sheet.headers:['Type','Kind','Value'],rows:[]};
-  found.forEach(x=>x.sheet.rows.forEach(r=>merged.rows.push(r)));
+  const merged={headers:['Value'],rows:[]};
+  found.forEach(x=>{
+    const vi=x.sheet.headers.findIndex(h=>/^value$/i.test(h));
+    const idx=vi>=0?vi:x.sheet.headers.length-1;
+    x.sheet.rows.forEach(r=>{if(String(r[idx]||'').trim())merged.rows.push([r[idx]]);});
+  });
   const c=contactClusters(merged);
   return {id:'contacts',title:'Contact normalization',
     narrative:`${merged.rows.length} contact entries normalize to ${c.distinct} distinct value(s); ${c.variantClusters} cluster(s) have multiple spellings. Normalize before any counterparty matching or entity resolution — variant addresses are the most common reason cross-report matching silently fails.`,
