@@ -291,6 +291,7 @@ footer{border-top:1px solid var(--line);background:var(--surface);margin-top:30p
         <span id="issueSummary"></span>
         <button class="btn btn-primary btn-sm" id="btnScan" type="button">Run error scan</button>
         <button class="btn btn-gold btn-sm hidden" id="btnAutofixAll" type="button">Auto-fix all safe issues</button>
+        <button class="btn btn-gold btn-sm hidden" id="btnFixDupes" type="button">Remove all duplicate rows</button>
       </div>
     </div>
     <div class="panel-body">
@@ -1363,6 +1364,7 @@ function runScan(){
   });
   App.issues=issues; App.scanned=true;
   $('btnAutofixAll').classList.toggle('hidden',!issues.some(i=>i.suggest!=null&&!i.resolved));
+  $('btnFixDupes').classList.toggle('hidden',!issues.some(i=>i.kind==='Duplicate row'&&!i.resolved));
   $('issueFilters').classList.toggle('hidden',!issues.length);
   renderIssues();renderPreview();unlockPhase2();
 }
@@ -1384,6 +1386,7 @@ function renderIssues(){
         <div class="where">${fmt.esc(it.fileName)} · ${fmt.esc(it.sheetName)}${it.row!=null?` · row ${it.row+2}`:''}${it.col!=null?` · ${fmt.esc(curData().sheet.headers[it.col])}`:''}${it.resolved?` · <strong>${it.resolution}</strong>`:''}</div>
       </div>
       ${it.resolved?'':`<div class="acts">
+        ${it.kind==='Duplicate row'||it.kind==='Amended-report duplicate'?`<button class="btn btn-gold btn-sm" onclick="removeRow(${it.id})">Remove row</button>`:''}
         ${it.col!=null?`<button class="btn btn-outline btn-sm" onclick="fixIssue(${it.id})">Correct…</button>`:''}
         ${it.suggest!=null?`<button class="btn btn-gold btn-sm" onclick="autoFix(${it.id})">Auto-fix</button>`:''}
         <button class="btn btn-outline btn-sm" onclick="acceptIssue(${it.id})">Accept as-is</button></div>`}
@@ -1406,6 +1409,30 @@ function acceptIssue(id){
     method:'Accepted as-is (no change)',issueType:it.kind});
   renderIssues();renderPreview();unlockPhase2();
 }
+function removeRow(id){
+  const it=App.issues[id], d=curData();
+  if(it.resolved||it.row==null||!d.sheet.rows[it.row])return;
+  const removed=d.sheet.rows[it.row];
+  const summary=removed.map(v=>String(v)).filter(v=>v.trim()!=='').slice(0,6).join(' | ');
+  d.sheet.rows.splice(it.row,1);
+  it.resolved=true; it.resolution='Row removed';
+  logChange({file:it.fileName,sheet:it.sheetName,row:it.row+2,header:'(entire row)',
+    old:summary,new:'(row removed)',method:'Removed duplicate row',issueType:it.kind});
+  // reconcile remaining issues against the shifted row indices
+  const rr=it.row;
+  App.issues.forEach(o=>{
+    if(o===it||o.resolved||o.row==null)return;
+    if(o.fileName!==it.fileName||o.sheetName!==it.sheetName)return;
+    if(o.row===rr){o.resolved=true;o.resolution='Row removed';}
+    else if(o.row>rr)o.row--;
+  });
+  $('btnFixDupes').classList.toggle('hidden',!App.issues.some(i=>i.kind==='Duplicate row'&&!i.resolved));
+  renderFileList();renderIssues();renderPreview();unlockPhase2();
+}
+$('btnFixDupes').onclick=()=>{
+  App.issues.filter(i=>!i.resolved&&i.kind==='Duplicate row')
+    .sort((a,b)=>b.row-a.row).forEach(i=>removeRow(i.id));
+};
 $('btnAutofixAll').onclick=()=>{
   App.issues.filter(i=>!i.resolved&&i.suggest!=null&&['Stray whitespace','Inconsistent capitalization'].includes(i.kind))
     .forEach(i=>autoFix(i.id));
