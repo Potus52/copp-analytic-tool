@@ -963,9 +963,10 @@ function parseSummaryTotals(aoa){
   const hi=rows.findIndex(r=>r[0]==='Year'&&/given/i.test(r[1]||'')&&/expend/i.test(r[3]||''));
   if(hi<0)return null;
   const out={years:{},total:null};
+  const n=v=>{const x=toNum(v);return x==null?0:x;};
   for(let i=hi+1;i<rows.length;i++){
     const r=rows[i]; if(!r[0])break;
-    const rec={given:+r[1]||0,received:+r[2]||0,expend:+r[3]||0};
+    const rec={given:n(r[1]),received:n(r[2]),expend:n(r[3])};
     if(/^total$/i.test(r[0]))out.total=rec; else if(/^(19|20)\d{2}$/.test(r[0]))out.years[r[0]]=rec;
     else break;
   }
@@ -1177,7 +1178,7 @@ function profileColumns(d){
     let role='text';
     for(const[r,rx]of Object.entries(ROLE_HINTS)){if(rx.test(h)){role=r;break;}}
     if(role==='text'&&isNum)role='number';
-    if(isDate&&role!=='date'&&/date/i.test(h)===false&&role==='text')role='date';
+    if(isDate&&role!=='date'&&/date/i.test(h)===false&&role==='text'&&vals.length>=5)role='date';
     return {header:h,idx:ci,type:isNum?'number':(isDate?'date':'text'),role,filled:vals.length,total:d.sheet.rows.length,unique:new Set(vals.map(v=>String(v).toLowerCase())).size};
   });
   App.profile=p; return p;
