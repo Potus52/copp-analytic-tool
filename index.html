@@ -226,6 +226,7 @@ footer{border-top:1px solid var(--line);background:var(--surface);margin-top:30p
     </div>
     <div class="mast-actions">
       <button class="btn-ghost" id="btnInstructions" type="button">&#9432; Instructions</button>
+      <button class="btn-ghost" id="btnLimits" type="button" title="Toggle the Montana contribution limit schedule (MCA 13-37-216)">&#9878; Limits</button>
       <button class="btn-ghost" id="btnSaveSession" type="button" title="Download a session file (data, corrections, reports) to resume later">&#8681; Save session</button>
       <button class="btn-ghost" id="btnTheme" type="button" aria-label="Toggle light or dark mode">&#9788; Light / Dark</button>
     </div>
@@ -242,8 +243,78 @@ footer{border-top:1px solid var(--line);background:var(--surface);margin-top:30p
 
 <main class="wrap">
 
+<!-- ===== Contribution limits reference (toggled from the header) ===== -->
+<section id="limitsPanel" class="hidden">
+  <div class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">Reference</span>
+      <h2>Montana Contribution Limits</h2>
+      <span class="tip"><span class="i" tabindex="0">i</span><span class="tipbox">Schedule verified against the COPP published summary and MCA 13-37-216 on June 11, 2026. Limits adjust each cycle for inflation (ARM 44.11.227); always confirm against the COPP page before relying on these figures for compliance.</span></span>
+      <div style="margin-left:auto"><button class="btn btn-outline btn-sm" id="btnLimitsHide" type="button">Hide</button></div>
+    </div>
+    <p class="muted" style="margin:4px 0 10px">Established under MCA 13-37-216, current amounts published in ARM 44.11.227. Limits apply <strong>per election</strong>: under 13-37-216(6), the primary counts as a separate election only when two or more candidates contest the same nomination. A contested primary means the limit applies twice in the cycle (once for the primary, once for the general); an uncontested primary means it applies once.</p>
+    <div class="row" style="gap:24px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:330px">
+        <h3 style="margin:6px 0">To candidates, per election (individuals and PACs)</h3>
+        <table class="data"><thead><tr><th>Office</th><th>2026-2027</th><th>2024-2025</th></tr></thead><tbody>
+          <tr><td>Governor / Lt. Governor</td><td>$1,190</td><td>$1,120</td></tr>
+          <tr><td>Other Statewide Office*</td><td>$830</td><td>$790</td></tr>
+          <tr><td>Other Public Office**</td><td>$470</td><td>$450</td></tr>
+        </tbody></table>
+        <p class="muted" style="margin:6px 0">*Attorney General, Secretary of State, State Auditor, Superintendent of Public Instruction, Supreme Court Justice, Clerk of the Supreme Court. **State district (PSC, State Senate, State House, District Judge), county, city, and school offices. The same per-election amounts apply to individual contributors and to independent political committees (PACs).</p>
+      </div>
+      <div style="flex:1;min-width:330px">
+        <h3 style="margin:6px 0">From political party committees, 2026-2027 (aggregate from ALL party committees)</h3>
+        <table class="data"><thead><tr><th>Office</th><th>Per election</th></tr></thead><tbody>
+          <tr><td>Governor / Lt. Governor</td><td>$118,700</td></tr>
+          <tr><td>Other Statewide Office</td><td>$89,050</td></tr>
+          <tr><td>Public Service Commission</td><td>$17,800</td></tr>
+          <tr><td>State Senate</td><td>$3,550</td></tr>
+          <tr><td>Other Public Office</td><td>$2,350</td></tr>
+        </tbody></table>
+        <p class="muted" style="margin:6px 0">House Bill 39 (2025) repealed MCA 13-35-231, so party committees may now contribute to judicial candidates. See also the personnel services exception, ARM 44.11.225(3).</p>
+      </div>
+    </div>
+    <div class="row" style="gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:6px">
+      <div style="flex:1;min-width:330px">
+        <h3 style="margin:6px 0">No limit</h3>
+        <p class="muted" style="margin:4px 0">Individual to a PAC, to a political party committee, or to a ballot issue committee. A candidate contributing to their own campaign.</p>
+      </div>
+      <div style="flex:1;min-width:330px">
+        <h3 style="margin:6px 0">Prohibited</h3>
+        <p class="muted" style="margin:4px 0">Corporations and unions may not contribute directly or indirectly to a candidate (MCA 13-35-227). They may do so only through a PAC organized as a separate, segregated fund of voluntary individual contributions.</p>
+      </div>
+    </div>
+    <p class="muted" style="margin:10px 0 0">Sources: <a href="https://politicalpractices.mt.gov/Home/Contribution-Limits" target="_blank" rel="noopener">COPP contribution limits summary</a> &middot; <a href="https://politicalpractices.mt.gov/Home/Contribution-Limits-2026-20271.pdf" target="_blank" rel="noopener">printable 2026-2027 PDF</a> &middot; <a href="https://mca.legmt.gov/bills/mca/title_0130/chapter_0370/part_0020/section_0160/0130-0370-0020-0160.html" target="_blank" rel="noopener">MCA 13-37-216</a> &middot; <a href="https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/7371cc4d-38b0-4c95-927f-307432d23aa1" target="_blank" rel="noopener">ARM 44.11.227</a>. Verified June 11, 2026. This is a screening reference, not legal advice.</p>
+  </div>
+</section>
+
 <!-- ============ PHASE 1 ============ -->
 <section id="phase1">
+
+  <div class="panel" id="aiPanel" style="border-left:4px solid var(--gold,#C9A227)">
+    <div class="panel-head">
+      <span class="eyebrow">AI Assistant</span>
+      <h2 style="display:flex;align-items:center;gap:10px">Claude-powered analysis
+        <span class="pill" id="aiStatusPill" style="font-size:.72rem">checking&hellip;</span></h2>
+      <div style="margin-left:auto">
+        <label class="row" style="gap:8px;font-weight:600;cursor:pointer">
+          <input type="checkbox" id="aiMasterToggle" style="width:18px;height:18px;accent-color:var(--gold,#C9A227)">
+          Enable AI assistant
+        </label>
+      </div>
+    </div>
+    <div class="row" style="gap:24px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:2;min-width:300px">
+        <p style="margin:4px 0"><strong>What it does.</strong> With the assistant enabled, the <em>Ask your own question</em> tab in Phase 2 sends your plain-language question to Claude, along with only the small set of rows from your data that are relevant to it. You get a written, narrative answer grounded in your uploaded dossiers. Reports marked <span class="pill pill-info">AI-assisted</span> used this path.</p>
+        <p class="muted" style="margin:6px 0"><strong>Privacy.</strong> Everything else (parsing, validation, the report library, exports) runs entirely in your browser. Data leaves your machine only when the assistant is enabled, and then only the retrieved rows for that one question. Your question is processed through this site's own server function; no API key ever reaches the browser.</p>
+      </div>
+      <div style="flex:1;min-width:280px" id="aiHowTo">
+        <p style="margin:4px 0"><strong>How to turn it on.</strong> Flip the toggle at right (or the matching checkbox in Phase 2). Your choice is remembered on this device.</p>
+        <p class="muted" id="aiAdminNote" style="margin:6px 0">If the status above reads <em>not available</em>, this deployment has no AI endpoint yet. The site administrator enables it in Netlify: Site configuration, Environment variables, add <code>ANTHROPIC_API_KEY</code>, then redeploy. The tool works fully without it; free-form questions fall back to the built-in query engine.</p>
+      </div>
+    </div>
+  </div>
 
   <div class="panel">
     <div class="panel-head">
@@ -505,6 +576,8 @@ document.querySelectorAll('.modal-bg').forEach(m=>{
   m.addEventListener('click',e=>{if(e.target===m||e.target.dataset.close!==undefined)m.classList.remove('open')});
 });
 $('btnInstructions').onclick=()=>$('modalInstructions').classList.add('open');
+$('btnLimits').onclick=()=>$('limitsPanel').classList.toggle('hidden');
+$('btnLimitsHide').onclick=()=>$('limitsPanel').classList.add('hidden');
 
 /* ---------- phases ---------- */
 function gotoPhase(p){
@@ -1494,6 +1567,28 @@ function groupSum(rows,keyIdx,valIdx){
 }
 function monthKey(v){const d=parseDate(v);return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:null;}
 
+/* ---- Montana contribution limits (MCA 13-37-216; ARM 44.11.227) ----
+   Verified against politicalpractices.mt.gov on 2026-06-11. Candidate limits
+   are per election and identical for individuals and independent PACs. */
+const MT_LIMITS={
+  verified:'June 11, 2026',
+  cycles:{
+    2026:{label:'2026-2027',candidate:{gov:1190,statewide:830,other:470},
+      party:{gov:118700,statewide:89050,psc:17800,senate:3550,other:2350}},
+    2024:{label:'2024-2025',candidate:{gov:1120,statewide:790,other:450},party:null}
+  }
+};
+function limitCycle(year){const y=+String(year).trim();
+  if(y>=2026)return MT_LIMITS.cycles[2026];
+  if(y>=2024)return MT_LIMITS.cycles[2024];
+  return null;}
+function officeTier(office){
+  const o=String(office||'').toLowerCase();
+  if(/governor/.test(o))return 'gov';
+  if(/attorney general|secretary of state|auditor|superintendent of public|supreme court justice|clerk of (the )?supreme/.test(o))return 'statewide';
+  return 'other';}
+const TIER_LABEL={gov:'Governor/Lt. Gov.',statewide:'Other Statewide',other:'Other Public Office'};
+
 const LIBRARY=[
  {id:'summary',title:'Dossier summary statistics',desc:'Row counts, totals, averages, min/max, and completeness for every column.',needs:[],chart:'bar'},
  {id:'topContrib',title:'Top 25 contributors',desc:'Largest contributors ranked by total amount given.',needs:['contributor','amount'],chart:'bar'},
@@ -1511,6 +1606,7 @@ const LIBRARY=[
  {id:'candVsCmte',title:'Candidate vs committee/measure spending',desc:'Yearly split between money spent on candidates and money routed to committees and ballot measures.',needs:[],needsHdr:['Recipient Type','Amount'],chart:'bar'},
  {id:'supportOppose',title:'Support vs oppose, by target',desc:'Parses the Supporting / opposing column to total independent spending for and against each named candidate.',needs:[],needsHdr:['Supporting / opposing','Amount'],chart:'bar'},
  {id:'flags',title:'Compliance flag screen',desc:'Counts and totals for Electioneering = Y, Corporate funds = Y, and Refund = Y transactions.',needs:[],needsHdr:['Refund','Amount'],chart:'bar'},
+ {id:'limitScreen',title:'Contribution limit screen (13-37-216)',desc:'Totals this committee\u2019s contributions given to each candidate, per year and election, and compares them to the Montana limit for that office and cycle. Flags amounts at or over the limit and lets you compare candidates by share of limit used.',needs:[],needsHdr:['Flow','Counterparty','Amount'],chart:'bar'},
  {id:'amendDupes',title:'Amended-report duplicates',desc:'Transactions that appear twice under different Report IDs \u2014 usually an amended filing restating the line, which double-counts totals if untreated.',needs:[],needsHdr:['Report ID'],chart:null},
  {id:'filings',title:'Filing hygiene (Source Reports)',desc:'Amendment rate, pre-election notices, missing original documents, and filings received well after period end.',needs:[],needsSheet:'source reports',chart:'bar'},
  {id:'contacts',title:'Contact normalization',desc:'Clusters address and contact variants (PO Box 87 six different ways) to a canonical form before any entity-level matching. Reads Contact and Identity sheets.',needs:[],needsSheet:'^(contact|identity)$',chart:null},
@@ -1841,6 +1937,49 @@ const RUNNERS={
     columns:c.cols,rows:c.rows.map(r=>[r[0],r[1],r[2],fmt.usd(r[3]),fmt.usd(r[4])]),
     chart:c.rows.length?{type:'bar',label:'Opposing spend by candidate',labels:c.rows.slice(0,12).map(r=>r[0]),data:c.rows.slice(0,12).map(r=>r[4])}:null};
  },
+ limitScreen(d){
+  const t=d.sheet,i=TXi(t);
+  const given=t.rows.filter(r=>r[i.Flow]==='Contribution Given');
+  const base={id:'limitScreen',title:'Contribution limit screen (13-37-216)'};
+  if(!given.length)return Object.assign(base,{
+    narrative:'No "Contribution Given" rows were found in this scope, so there is nothing to screen against the candidate contribution limits. Independent expenditures are not subject to 13-37-216 and are excluded by design.',
+    kpis:[{l:'Contributions given',v:0}],columns:['Recipient'],rows:[]});
+  const g={};
+  given.forEach(r=>{
+    const recip=String(r[i.Counterparty]||'(blank)').trim();
+    const yr=String(r[i.Year]||'').trim();
+    const elRaw=String(i.Election!=null?r[i.Election]||'':'').trim();
+    const el=/prim/i.test(elRaw)?'Primary':/gen/i.test(elRaw)?'General':'(not stated)';
+    const ent=i.Entity!=null?String(r[i.Entity]||''):'';
+    const k=[ent,recip.toLowerCase(),yr,el].join('\u0001');
+    (g[k]=g[k]||{ent,recip,yr,el,office:'',total:0,n:0});
+    g[k].total+=dnum(r[i.Amount]);g[k].n++;
+    const off=i.Office!=null?String(r[i.Office]||'').trim():'';
+    if(off&&!g[k].office)g[k].office=off;
+  });
+  let over=0,atLim=0,unsched=0,unstated=0;
+  const items=Object.values(g).map(x=>{
+    const cyc=limitCycle(x.yr),tier=officeTier(x.office);
+    let lim=null,pctv=-1,status;
+    if(!cyc){status='No verified schedule for '+(x.yr||'this year');unsched++;}
+    else{lim=cyc.candidate[tier];pctv=x.total/lim;
+      if(x.total>lim){status='OVER by '+fmt.usd(x.total-lim);over++;}
+      else if(x.total===lim){status='At limit';atLim++;}
+      else status='Within limit';
+      if(x.el==='(not stated)'){status+=' \u00b7 election not stated';unstated++;}}
+    return Object.assign(x,{tier,lim,pctv,status});
+  }).sort((a,b)=>b.pctv-a.pctv);
+  const rows=items.map(x=>[x.ent,x.recip,x.office||'(not stated)',TIER_LABEL[x.tier],x.yr,x.el,x.n,
+    fmt.usd(x.total),x.lim!=null?fmt.usd(x.lim):'\u2014',x.pctv>=0?(100*x.pctv).toFixed(1)+'%':'\u2014',x.status]);
+  const tot=items.reduce((a,x)=>a+x.total,0);
+  const top=items.filter(x=>x.pctv>=0).slice(0,12);
+  return Object.assign(base,{
+    narrative:`${given.length} contribution(s) given, totaling ${fmt.usd(tot)}, aggregated into ${items.length} recipient, year, and election combination(s) and compared to the per-election candidate limits published by COPP under MCA 13-37-216 (2026-2027: $1,190 Governor/Lt. Governor, $830 other statewide, $470 other public office; the same amounts apply to individuals and PACs). ${over?over+' combination(s) EXCEED the applicable limit. ':''}${atLim?atLim+' are exactly at the limit. ':''}${unstated?unstated+' lack an election designation, so primary and general giving could not be separated; under 13-37-216(6) the limit applies per election only when the primary is contested. ':''}${unsched?unsched+' fall in years with no verified schedule in this tool and show totals only. ':''}This is a screening aid, not a determination: amendments, refunds, in-kind valuation, and joint fundraising attribution can change the math, and office classification is inferred from the Office column. Verified against COPP ${MT_LIMITS.verified}; open the Limits panel in the header for the full schedule.`,
+    kpis:[{l:'Total given',v:fmt.usd(tot)},{l:'Recipient/election combos',v:items.length},{l:'Over limit',v:over},{l:'Needs review',v:unstated+unsched}],
+    columns:['Entity','Recipient','Office','Limit tier','Year','Election','Txns','Total Given','Limit (per election)','% of Limit','Status'],
+    rows,
+    chart:top.length?{type:'bar',label:'% of per-election limit used',labels:top.map(x=>`${x.recip} (${x.yr}${x.el==='(not stated)'?'':' '+x.el})`),data:top.map(x=>+(100*x.pctv).toFixed(1))}:null});
+ },
  transfers(d){
   const t=transfers2(d.sheet);
   return {id:'transfers',title:'Cross-entity: possible transfers',
@@ -2118,7 +2257,7 @@ async function xlSave(wb,name){const buf=await wb.xlsx.writeBuffer();
 function xlNamer(reserved){const used={};(reserved||[]).forEach(n=>used[n]=1);
   return s=>{let n=String(s).replace(/[\\\/\?\*\[\]:]/g,'-').slice(0,31)||'Sheet';let b=n,k=2;
     while(used[n]){n=b.slice(0,28)+' '+(k++);}used[n]=1;return n;};}
-const xlMoneyHdr=h=>/amount|total|paid|spend|given|received|\$|overcount|expenditure/i.test(String(h))&&!/%|count|#|type|date/i.test(String(h));
+const xlMoneyHdr=h=>/amount|total|paid|spend|given|received|\$|overcount|expenditure|limit/i.test(String(h))&&!/%|count|#|type|date|tier/i.test(String(h));
 const xlPctHdr=h=>/%/.test(String(h));
 const xlYearHdr=h=>/^year$/i.test(String(h).trim());
 function xlBorder(){const s={style:'thin',color:{argb:XL.line}};return{top:s,left:s,bottom:s,right:s};}
@@ -2336,6 +2475,15 @@ $('btnDlAllXlsx').onclick=()=>{
 };
 $('btnDlAllPdf').onclick=()=>{if(App.results.length)pdfReport(App.results,`COPP-full-report-${new Date().toISOString().slice(0,10)}.pdf`);};
 
+/* jsPDF's built-in fonts only encode WinAnsi (cp1252). Characters outside it
+   (arrows, checkmarks, etc.) corrupt glyphs and width metrics, so map them to
+   safe equivalents and replace anything else unrepresentable. */
+function pdfText(v){
+  let s=String(v??'');
+  const map={'\u2192':'->','\u2190':'<-','\u2194':'<->','\u21D2':'=>','\u2713':'(y)','\u2717':'(n)','\u00A0':' '};
+  s=s.replace(/[\u2190-\u21FF\u2300-\u27BF\u2B00-\u2BFF]/g,c=>map[c]||'-');
+  return s.replace(/[^\x00-\xFF\u2013\u2014\u2018\u2019\u201C\u201D\u2026\u20AC\u2022]/g,'?');
+}
 /* Prepare a result table for PDF: drop empty columns, prioritize informative
    ones, cap at maxCols, truncate long text so rows stay one or two lines. */
 function pdfTable(res,maxCols){
@@ -2346,13 +2494,13 @@ function pdfTable(res,maxCols){
   cols=cols.filter(c=>rows.some(r=>String(r[c.idx]??'').trim()!==''));
   // if still too wide, keep the most informative columns in a sensible order
   if(cols.length>maxCols){
-    const PRIORITY=['#','Entity','Year','Flow','Date','Counterparty','Recipient','Target','Party','Office','Amount','Total','Total $','Support $','Oppose $','% of Total','Cumulative %','Quarter','Report ID','Election','Recipient Type','Purpose','Description'];
+    const PRIORITY=['#','Entity','Year','Flow','Date','Counterparty','Recipient','Target','Party','Office','Amount','Total','Total $','Total Given','Limit (per election)','% of Limit','Status','Support $','Oppose $','% of Total','Cumulative %','Quarter','Report ID','Election','Recipient Type','Purpose','Description'];
     const rank=n=>{const i=PRIORITY.findIndex(p=>p.toLowerCase()===n.toLowerCase());return i<0?PRIORITY.length+(/(amount|total|\$)/i.test(n)?0:5):i;};
     cols=cols.slice().sort((a,b)=>rank(a.name)-rank(b.name)).slice(0,maxCols)
       .sort((a,b)=>a.idx-b.idx);
   }
-  const trunc=v=>{const s=String(v??'');return s.length>60?s.slice(0,57)+'…':s;};
-  return{head:cols.map(c=>c.name),
+  const trunc=v=>{const s=pdfText(v);return s.length>60?s.slice(0,57)+'…':s;};
+  return{head:cols.map(c=>pdfText(c.name)),
     body:rows.map(r=>cols.map(c=>trunc(r[c.idx]))),
     dropped:res.columns.length-cols.length};
 }
@@ -2368,15 +2516,15 @@ function pdfReport(results,name){
   doc.setTextColor(255);doc.setFont('times','bold');doc.setFontSize(18);doc.text('Montana COPP Analytic Tool',40,38);
   doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(199,211,224);
   doc.text('Commissioner of Political Practices · Analysis report · '+new Date().toLocaleString(),40,56);
-  doc.text('Source: '+App.files.map(f=>f.name).join('; ').slice(0,110),40,70);
+  doc.text(pdfText('Source: '+App.files.map(f=>f.name).join('; ').slice(0,110)),40,70);
   let y=116;
   results.forEach((res,ri)=>{
     if(y>H-130){doc.addPage();y=50;}
     doc.setTextColor(28,68,117);doc.setFont('times','bold');doc.setFontSize(14);
-    doc.text(`${ri+1}. ${res.title}`,40,y);y+=8;
+    doc.text(pdfText(`${ri+1}. ${res.title}`),40,y);y+=8;
     doc.setDrawColor(201,162,39);doc.setLineWidth(1.5);doc.line(40,y,200,y);y+=14;
     doc.setTextColor(40);doc.setFont('helvetica','normal');doc.setFontSize(9.5);
-    const wrapped=doc.splitTextToSize('Analysis: '+res.narrative,W-80);
+    const wrapped=doc.splitTextToSize(pdfText('Analysis: '+res.narrative),W-80);
     doc.text(wrapped,40,y);y+=wrapped.length*12+6;
     const ch=App.charts[res.id];
     if(ch){try{const img=ch.toBase64Image('image/png',1);
@@ -2407,7 +2555,7 @@ function pdfReport(results,name){
   doc.setTextColor(28,68,117);doc.setFont('times','bold');doc.setFontSize(14);doc.text('Phase 1 change log (audit trail)',40,50);
   doc.setDrawColor(201,162,39);doc.line(40,58,260,58);
   if(App.changeLog.length){
-    doc.autoTable({startY:70,head:[changeLogAoA()[0]],body:changeLogAoA().slice(1).map(r=>r.map(String)),
+    doc.autoTable({startY:70,head:[changeLogAoA()[0]],body:changeLogAoA().slice(1).map(r=>r.map(v=>pdfText(v))),
       margin:{left:40,right:40},styles:{fontSize:7,cellPadding:2.5},headStyles:{fillColor:[19,51,90],textColor:255}});
   }else{doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(80);doc.text('No changes were made to the uploaded data.',40,78);}
   // page numbers
@@ -2418,6 +2566,30 @@ function pdfReport(results,name){
 }
 
 refreshAll();
+
+/* ---------- AI assistant: status probe + master toggle ---------- */
+function setAiPill(state){
+  const p=$('aiStatusPill');
+  if(state==='ok'){p.textContent='Available on this deployment';p.className='pill pill-ok';}
+  else if(state==='no'){p.textContent='Not available on this deployment';p.className='pill pill-warn';}
+  else{p.textContent='checking\u2026';p.className='pill';}
+}
+async function probeAI(){
+  setAiPill('checking');
+  try{
+    const r=await fetch('/.netlify/functions/ask',{method:'OPTIONS'});
+    setAiPill(r.status===404?'no':'ok');
+  }catch(e){setAiPill('no');}
+}
+function setAiEnabled(on,skipStore){
+  $('aiMasterToggle').checked=on;
+  if($('chkAI'))$('chkAI').checked=on;
+  if(!skipStore)try{localStorage.setItem('copp-ai',on?'1':'0')}catch(e){}
+}
+$('aiMasterToggle').onchange=e=>setAiEnabled(e.target.checked);
+if($('chkAI'))$('chkAI').addEventListener('change',e=>setAiEnabled(e.target.checked));
+try{setAiEnabled(localStorage.getItem('copp-ai')==='1',true)}catch(e){}
+probeAI();
 </script>
 </body>
 </html>
