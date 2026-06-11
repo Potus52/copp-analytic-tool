@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -159,6 +160,7 @@ td.editable:hover{outline:1px dashed var(--gold);cursor:text}
 .narrative{background:var(--info-bg);border-left:4px solid var(--navy-3);border-radius:0 var(--r) var(--r) 0;padding:12px 15px;font-size:14px;margin-bottom:14px}
 [data-theme="dark"] .narrative{border-left-color:var(--gold)}
 .chartbox{position:relative;height:320px;margin:14px 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.chartbox.round{max-width:600px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .kpi{border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:var(--r);padding:10px 12px;background:var(--surface)}
 .kpi .v{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;color:var(--navy-3)}
@@ -2062,7 +2064,7 @@ function renderResult(res){
     <div class="result-body">
       ${res.kpis?.length?`<div class="kpis">${res.kpis.map(k=>`<div class="kpi"><div class="v">${fmt.esc(k.v)}</div><div class="l">${fmt.esc(k.l)}</div></div>`).join('')}</div>`:''}
       <div class="narrative"><strong>Analysis.</strong> ${fmt.esc(res.narrative)}</div>
-      ${res.chart?`<div class="chartbox"><canvas id="ch-${res.id}"></canvas></div>`:''}
+      ${res.chart?`<div class="chartbox${['doughnut','pie','polarArea'].includes(res.chart.type)?' round':''}"><canvas id="ch-${res.id}"></canvas></div>`:''}
       ${res.rows?.length?`<div class="tbl-scroll" style="max-height:330px"><table class="data"><thead><tr>${res.columns.map(c=>`<th>${fmt.esc(c)}</th>`).join('')}</tr></thead>
         <tbody>${res.rows.slice(0,300).map(r=>`<tr>${r.map(c=>`<td>${fmt.esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
         ${res.rows.length>300?`<p class="muted">Showing 300 of ${res.rows.length} rows — exports include all rows.</p>`:''}`:'<p class="muted">No table rows for this result.</p>'}
@@ -2079,7 +2081,7 @@ function renderResult(res){
         borderColor:res.chart.type==='line'?'#C9A227':colors,borderWidth:res.chart.type==='line'?2.5:1,
         fill:res.chart.type==='line',tension:.3,pointBackgroundColor:'#C9A227'}]},
       options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:res.chart.type!=='bar',labels:{color:dark?'#9FB0C0':'#4E5D6C'}}},
+        plugins:{legend:{display:res.chart.type!=='bar',position:['doughnut','pie','polarArea'].includes(res.chart.type)?'right':'top',labels:{color:dark?'#9FB0C0':'#4E5D6C',boxWidth:14}}},
         scales:['bar','line'].includes(res.chart.type)?{x:{ticks:{color:dark?'#9FB0C0':'#4E5D6C',maxRotation:60},grid:{display:false}},
           y:{ticks:{color:dark?'#9FB0C0':'#4E5D6C'},grid:{color:dark?'#2A3B4E':'#E2E7EC'}}}:{}}});
     App.charts[res.id]=ch;
@@ -2104,34 +2106,196 @@ function renderMoreSuggestions(ranIds){
 function runOne(id){const d=analysisData();profileColumns(d);const r=RUNNERS[id]&&RUNNERS[id](d);if(r)addResult(r);renderMoreSuggestions([]);}
 
 /* ================= Exports ================= */
+/* ---- styled XLSX via ExcelJS (SheetJS remains the reader) ---- */
+const XL={navy:'FF0A2240',navy2:'FF13335A',gold:'FFC9A227',band:'FFF2F5F8',line:'FFD9E0E8',
+  ink:'FF22313F',sub:'FF5A6B7C',white:'FFFFFFFF',totfill:'FFF3EBD3'};
+const XLF='Calibri';
+const FMT_USD='$#,##0.00;($#,##0.00)';
+function xlReady(){if(typeof ExcelJS==='undefined'){alert('The Excel styling library (ExcelJS) did not load. Check the connection and reload the page.');return false;}return true;}
+function xlNew(){const wb=new ExcelJS.Workbook();wb.creator='Montana COPP Analytic Tool';wb.created=new Date();return wb;}
+async function xlSave(wb,name){const buf=await wb.xlsx.writeBuffer();
+  triggerDl(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),name);}
+function xlNamer(reserved){const used={};(reserved||[]).forEach(n=>used[n]=1);
+  return s=>{let n=String(s).replace(/[\\\/\?\*\[\]:]/g,'-').slice(0,31)||'Sheet';let b=n,k=2;
+    while(used[n]){n=b.slice(0,28)+' '+(k++);}used[n]=1;return n;};}
+const xlMoneyHdr=h=>/amount|total|paid|spend|given|received|\$|overcount|expenditure/i.test(String(h))&&!/%|count|#|type|date/i.test(String(h));
+const xlPctHdr=h=>/%/.test(String(h));
+const xlYearHdr=h=>/^year$/i.test(String(h).trim());
+function xlBorder(){const s={style:'thin',color:{argb:XL.line}};return{top:s,left:s,bottom:s,right:s};}
+/* Title band: navy title row, gold rule, optional italic subtitle. Returns header row index. */
+function xlTitle(ws,ncols,title,subtitle){
+  ncols=Math.max(ncols,3);
+  ws.mergeCells(1,1,1,ncols);
+  const c=ws.getCell(1,1);c.value=title;
+  c.font={name:XLF,size:15,bold:true,color:{argb:XL.white}};
+  c.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.navy}};
+  c.alignment={vertical:'middle',indent:1};
+  ws.getRow(1).height=30;
+  ws.mergeCells(2,1,2,ncols);
+  ws.getCell(2,1).fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.gold}};
+  ws.getRow(2).height=4;
+  let next=3;
+  if(subtitle){
+    ws.mergeCells(3,1,3,ncols);
+    const s=ws.getCell(3,1);s.value=subtitle;
+    s.font={name:XLF,size:10,italic:true,color:{argb:XL.sub}};
+    s.alignment={vertical:'middle',wrapText:true,indent:1};
+    ws.getRow(3).height=Math.min(60,15*Math.ceil(String(subtitle).length/150)+8);
+    next=4;}
+  return next+1; /* one blank spacer row */
+}
+/* Styled table: navy header, banding, borders, true numbers with formats,
+   autofilter + frozen header, content-fit widths (opts.colW overrides). */
+function xlTable(ws,startRow,headers,rows,opts){
+  opts=opts||{};const n=headers.length;
+  const hr=ws.getRow(startRow);
+  headers.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=String(h);
+    c.font={name:XLF,size:10,bold:true,color:{argb:XL.white}};
+    c.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.navy2}};
+    c.alignment={vertical:'middle',wrapText:true};c.border=xlBorder();});
+  hr.height=20;
+  const money=headers.map(xlMoneyHdr),year=headers.map(xlYearHdr),pcth=headers.map(xlPctHdr);
+  rows.forEach((r,ri)=>{
+    const row=ws.getRow(startRow+1+ri);
+    const isTot=opts.totalRows!==false&&String(r[0]).trim()==='Total';
+    for(let ci=0;ci<n;ci++){
+      const c=row.getCell(ci+1);let v=r[ci];
+      if(typeof v==='number'){
+        if(money[ci])c.numFmt=FMT_USD;
+        else if(pcth[ci])c.numFmt='0.0%';
+        else if(year[ci]||Number.isInteger(v)&&v>=1900&&v<=2100&&ci===0)c.numFmt='0';
+        else c.numFmt=Number.isInteger(v)?'#,##0':'#,##0.00';
+      }else{
+        const s=String(v==null?'':v).trim();
+        if(money[ci]){const nv=toNum(s);if(nv!=null&&s!==''){v=nv;c.numFmt=FMT_USD;}}
+        else if(pcth[ci]&&/%$/.test(s)){const nv=toNum(s.replace('%',''));if(nv!=null){v=nv/100;c.numFmt='0.0%';}}
+        else if(year[ci]&&/^\d{4}$/.test(s)){v=+s;c.numFmt='0';}
+        else if(s!==''&&!/^0\d/.test(s)&&/^-?\d+(\.\d+)?$/.test(s)){v=+s;c.numFmt=Number.isInteger(+s)?'#,##0':'#,##0.00';}
+      }
+      c.value=(v===''||v==null)?null:v;
+      c.font={name:XLF,size:10,bold:!!isTot,color:{argb:XL.ink}};
+      c.border=xlBorder();
+      c.alignment={vertical:'top',wrapText:String(v==null?'':v).length>70};
+      if(isTot)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.totfill}};
+      else if(ri%2===1)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.band}};
+    }
+  });
+  if(opts.filter!==false&&rows.length)
+    ws.autoFilter={from:{row:startRow,column:1},to:{row:startRow+rows.length,column:n}};
+  ws.views=[{state:'frozen',ySplit:startRow}];
+  headers.forEach((h,i)=>{
+    if(opts.colW&&opts.colW[i]){ws.getColumn(i+1).width=opts.colW[i];return;}
+    let m=String(h).length;
+    for(let r=0;r<Math.min(rows.length,500);r++){const L=String(rows[r][i]??'').length;if(L>m)m=L;}
+    ws.getColumn(i+1).width=Math.max(9,Math.min(46,m+3));});
+  return startRow+rows.length+1;
+}
+function xlDataSheet(wb,name,title,subtitle,headers,rows,opts){
+  const ws=wb.addWorksheet(name);
+  const hr=xlTitle(ws,(headers||[]).length,title,subtitle);
+  xlTable(ws,hr,headers||[],rows||[],opts);
+  return ws;
+}
+function xlChangeLogSheet(wb){
+  const a=changeLogAoA();
+  xlDataSheet(wb,'Change Log','Phase 1 change log (audit trail)',
+    App.changeLog.length?`${App.changeLog.length} recorded correction${App.changeLog.length===1?'':'s'}: every edit, auto-fix, row removal, and acceptance from validation.`
+      :'No changes were made to the uploaded data.',
+    a[0],a.slice(1),{filter:App.changeLog.length>0});
+}
+function xlCoverSheet(wb,meta,narrative){
+  const ws=wb.addWorksheet('Report');
+  let r=xlTitle(ws,2,'Montana COPP Analytic Tool',null);
+  meta.forEach(([k,v])=>{
+    const kc=ws.getCell(r,1);kc.value=k;kc.font={name:XLF,size:10,bold:true,color:{argb:XL.navy2}};
+    const vc=ws.getCell(r,2);vc.value=v;vc.font={name:XLF,size:10,color:{argb:XL.ink}};
+    vc.alignment={wrapText:true,vertical:'top'};r++;});
+  r++;
+  const hc=ws.getCell(r,1);hc.value='Analysis';
+  hc.font={name:XLF,size:12,bold:true,color:{argb:XL.navy2}};
+  hc.border={bottom:{style:'medium',color:{argb:XL.gold}}};r++;
+  ws.mergeCells(r,1,r,2);
+  const nc=ws.getCell(r,1);nc.value=narrative;
+  nc.font={name:XLF,size:10,color:{argb:XL.ink}};
+  nc.alignment={wrapText:true,vertical:'top'};
+  ws.getRow(r).height=Math.min(220,15*Math.ceil(String(narrative||'').length/105)+10);
+  ws.getColumn(1).width=28;ws.getColumn(2).width=92;
+}
+/* Analysis sheet: line-item block left, styled pivot blocks right. */
+function xlAnalysisSheet(wb,t,label){
+  const i=TXi(t);
+  const multi=new Set(t.rows.map(r=>r[i.Entity])).size>1;
+  const lineCols=[...(multi?['Entity']:[]),'Year','Date','Counterparty','Office','Party','Election','Amount','Type','Quarter'];
+  const exp=t.rows.filter(r=>r[i.Flow]==='Expenditure');
+  const line=exp.map(r=>{const base=[r[i.Year],r[i.Date],r[i.Counterparty],r[i.Office],r[i.Party],r[i.Election],
+    dnum(r[i.Amount]),r[i['Recipient Type']]||'Committee/Measure',r[i.Quarter]];
+    return multi?[r[i.Entity],...base]:base;});
+  const ws=wb.addWorksheet('Analysis');
+  const pivots=[['1 · Spend by Party (by year)',pivotPartyYear(t)],
+    ['2 · Recipient Concentration (top 10)',concentration2(t,10)],
+    ['3 · Expenditures by Quarter',byQuarter(t)],
+    ['4 · Committee/Measure vs Candidate (by year)',candVsCmte2(t)]];
+  const off=lineCols.length+2;
+  const totCols=off+Math.max(...pivots.map(p=>p[1].cols.length))-1;
+  const hdrRow=xlTitle(ws,totCols,`Expenditure Analysis — ${label}`,
+    'Consolidated line-item detail at left; computed pivot blocks at right. Money cells are true numbers, so Excel can re-total and re-pivot them.');
+  xlTable(ws,hdrRow,lineCols,line);
+  let r=hdrRow;
+  pivots.forEach(([title,p])=>{
+    const tc=ws.getCell(r,off);tc.value=title;
+    tc.font={name:XLF,size:11,bold:true,color:{argb:XL.navy2}};
+    tc.border={bottom:{style:'medium',color:{argb:XL.gold}}};r++;
+    p.cols.forEach((h,k)=>{const c=ws.getCell(r,off+k);c.value=String(h);
+      c.font={name:XLF,size:10,bold:true,color:{argb:XL.white}};
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.navy2}};c.border=xlBorder();});
+    r++;
+    const isPct=p.cols.map(xlPctHdr),isYr=p.cols.map(xlYearHdr);
+    p.rows.forEach(pr=>{
+      const isTot=String(pr[0]).trim()==='Total';
+      p.cols.forEach((h,k)=>{const c=ws.getCell(r,off+k);let v=pr[k];
+        if(typeof v==='number'){c.numFmt=isPct[k]?'0.0%':(isYr[k]?'0':FMT_USD);}
+        else if((isYr[k]||k===0)&&/^\d{4}$/.test(String(v).trim())){v=+v;c.numFmt='0';}
+        c.value=(v===''||v==null)?null:v;
+        c.font={name:XLF,size:10,bold:isTot,color:{argb:XL.ink}};
+        c.border=xlBorder();
+        if(isTot)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.totfill}};});
+      r++;});
+    r++;});
+  ws.getColumn(off-1).width=3;
+  for(let c=off;c<=totCols;c++)ws.getColumn(c).width=Math.max(ws.getColumn(c).width||0,16);
+}
+
 /* ---- enhanced workbook export (v1 dossier -> v2 with Analysis sheet) ---- */
 $('btnEnhanced').onclick=()=>{
+  if(!xlReady())return;
   const scope=$('selScope')?$('selScope').value:'sheet';
-  const wb=XLSX.utils.book_new();
-  const used={};const sname=s=>{let n=s.replace(/[\\\/\?\*\[\]:]/g,'-').slice(0,31)||'Sheet';let b=n,k=2;while(used[n]){n=(b.slice(0,28))+' '+(k++);}used[n]=1;return n;};
+  const wb=xlNew();
   if(scope==='combined'){
     const t=combineFiles(App.files);
     if(!t.rows.length){alert('No consolidated transaction data found. Upload at least one dossier-style workbook.');return;}
     const label=`Entities ${App.files.filter(f=>f.entity).map(f=>f.entity).join(' + ')||'(combined)'}`;
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildAnalysisAoA(t,label+' — combined')),'Analysis');
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([t.headers,...t.rows]),'All Transactions');
+    xlAnalysisSheet(wb,t,label+' — combined');
+    xlDataSheet(wb,'All Transactions','All Transactions — combined',null,t.headers,t.rows);
+    const sname=xlNamer(['Analysis','All Transactions','Change Log']);
     App.files.forEach(f=>Object.entries(f.sheets).forEach(([sn,s])=>{
-      if(sn==='All Transactions')return;
-      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([s.headers,...s.rows]),sname(`${f.entity||'F'} ${sn}`));
+      if(sn==='All Transactions'||!s.headers?.length)return;
+      xlDataSheet(wb,sname(`${f.entity||'F'} ${sn}`),`${sn} — ${f.entity||f.name}`,null,s.headers,s.rows);
     }));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
-    XLSX.writeFile(wb,`COPP-combined-enhanced-${new Date().toISOString().slice(0,10)}.xlsx`);
+    xlChangeLogSheet(wb);
+    xlSave(wb,`COPP-combined-enhanced-${new Date().toISOString().slice(0,10)}.xlsx`);
     return;
   }
   const f=App.files[App.cur.file];
   if(!f||!f.sheets['All Transactions']){alert('The current file has no consolidated All Transactions sheet. Enhanced export needs a dossier-style workbook.');return;}
   const t=f.sheets['All Transactions'];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildAnalysisAoA(t,`Entity ${f.entity||f.name}`)),'Analysis');
+  xlAnalysisSheet(wb,t,`Entity ${f.entity||f.name}`);
+  const sname=xlNamer(['Analysis','Change Log']);
   Object.entries(f.sheets).forEach(([sn,s])=>{
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([s.headers,...s.rows]),sname(sn));
+    if(!s.headers?.length)return;
+    xlDataSheet(wb,sname(sn),sn==='All Transactions'?`All Transactions — ${f.entity||f.name}`:sn,null,s.headers,s.rows);
   });
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
-  XLSX.writeFile(wb,`${f.name.replace(/\.(xlsx|xls|csv)$/i,'')}-enhanced.xlsx`);
+  xlChangeLogSheet(wb);
+  xlSave(wb,`${f.name.replace(/\.(xlsx|xls|csv)$/i,'')}-enhanced.xlsx`);
 };
 
 function triggerDl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);}
@@ -2146,28 +2310,29 @@ function safeName(s){return s.replace(/[^a-z0-9 \-_]/gi,'').slice(0,40)||'report
 function exportOne(res,kind){
   if(kind==='csv'){downloadCSV([res.columns,...res.rows,[],['— Phase 1 change log —'],...changeLogAoA()],`COPP-${safeName(res.title)}.csv`);return;}
   if(kind==='xlsx'){
-    const wb=XLSX.utils.book_new();
-    const front=[['Montana COPP Analytic Tool'],['Report',res.title],['Generated',new Date().toLocaleString()],
-      ['Source',analysisData()?.fileName||''],['Corrections applied (Phase 1)',App.changeLog.length],[],['Analysis'],[res.narrative]];
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(front),'Report');
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([res.columns,...res.rows]),'Data');
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
-    XLSX.writeFile(wb,`COPP-${safeName(res.title)}.xlsx`);return;
+    if(!xlReady())return;
+    const wb=xlNew();
+    xlCoverSheet(wb,[['Report',res.title],['Generated',new Date().toLocaleString()],
+      ['Source',analysisData()?.fileName||''],['Corrections applied (Phase 1)',App.changeLog.length]],res.narrative);
+    xlDataSheet(wb,'Data',res.title,null,res.columns,res.rows);
+    xlChangeLogSheet(wb);
+    xlSave(wb,`COPP-${safeName(res.title)}.xlsx`);return;
   }
   if(kind==='pdf')pdfReport([res],`COPP-${safeName(res.title)}.pdf`);
 }
 $('btnDlAllXlsx').onclick=()=>{
   if(!App.results.length)return;
-  const wb=XLSX.utils.book_new();
-  const front=[['Montana COPP Analytic Tool — Session Report'],['Generated',new Date().toLocaleString()],
-    ['Source file(s)',App.files.map(f=>f.name).join('; ')],['Reports included',App.results.length],
-    ['Phase 1 corrections recorded',App.changeLog.length],[],
-    ['#','Report','Analysis']];
-  App.results.forEach((r,i)=>front.push([i+1,r.title,r.narrative]));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(front),'Summary');
-  App.results.forEach((r,i)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([[r.title],[r.narrative],[],r.columns,...r.rows]),`R${i+1} ${safeName(r.title).slice(0,24)}`));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeLogAoA()),'Change Log');
-  XLSX.writeFile(wb,`COPP-full-report-${new Date().toISOString().slice(0,10)}.xlsx`);
+  if(!xlReady())return;
+  const wb=xlNew();
+  const ws=wb.addWorksheet('Summary');
+  const hr=xlTitle(ws,3,'Montana COPP Analytic Tool — Session Report',
+    `Generated ${new Date().toLocaleString()} · Source: ${App.files.map(f=>f.name).join('; ')} · ${App.results.length} report${App.results.length===1?'':'s'} · ${App.changeLog.length} Phase 1 correction${App.changeLog.length===1?'':'s'}`);
+  xlTable(ws,hr,['#','Report','Analysis'],App.results.map((r,i)=>[i+1,r.title,r.narrative]),
+    {colW:[5,36,120],filter:false});
+  const sname=xlNamer(['Summary','Change Log']);
+  App.results.forEach((r,i)=>xlDataSheet(wb,sname(`R${i+1} ${safeName(r.title).slice(0,24)}`),r.title,r.narrative,r.columns,r.rows));
+  xlChangeLogSheet(wb);
+  xlSave(wb,`COPP-full-report-${new Date().toISOString().slice(0,10)}.xlsx`);
 };
 $('btnDlAllPdf').onclick=()=>{if(App.results.length)pdfReport(App.results,`COPP-full-report-${new Date().toISOString().slice(0,10)}.pdf`);};
 
@@ -2215,10 +2380,15 @@ function pdfReport(results,name){
     doc.text(wrapped,40,y);y+=wrapped.length*12+6;
     const ch=App.charts[res.id];
     if(ch){try{const img=ch.toBase64Image('image/png',1);
-      const h=180,w=Math.min(W-80,420);
+      /* preserve the chart canvas's true aspect ratio so circles stay circular */
+      const cw=ch.canvas.width||4,chh=ch.canvas.height||3,ratio=chh/cw;
+      let w=Math.min(W-92,440),h=w*ratio;
+      const maxH=235;
+      if(h>maxH){h=maxH;w=h/ratio;}
       if(y+h>H-70){doc.addPage();y=50;}
-      doc.setFillColor(255,255,255);doc.rect(40,y,w,h,'F');
-      doc.addImage(img,'PNG',40,y,w,h);y+=h+12;}catch(e){}}
+      doc.setFillColor(255,255,255);doc.setDrawColor(217,224,232);doc.setLineWidth(.75);
+      doc.roundedRect(40,y,w+12,h+12,4,4,'FD');
+      doc.addImage(img,'PNG',46,y+6,w,h);y+=h+24;}catch(e){}}
     if(res.rows?.length){
       const t=pdfTable(res);
       doc.autoTable({startY:y,head:[t.head],body:t.body,
